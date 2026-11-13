@@ -1,0 +1,146 @@
+{
+ "method": "count_tokens",
+ "docs": [
+  {
+   "doc_id": "TC1",
+   "in": 6987,
+   "chars": 18537
+  },
+  {
+   "doc_id": "TC2",
+   "in": 4544,
+   "chars": 14150
+  },
+  {
+   "doc_id": "TC3",
+   "in": 3856,
+   "chars": 12258
+  },
+  {
+   "doc_id": "TC4",
+   "in": 16548,
+   "chars": 44167
+  },
+  {
+   "doc_id": "SYN01",
+   "in": 1024,
+   "chars": 2920
+  },
+  {
+   "doc_id": "SYN02",
+   "in": 924,
+   "chars": 2713
+  },
+  {
+   "doc_id": "SYN03",
+   "in": 921,
+   "chars": 2624
+  },
+  {
+   "doc_id": "SYN04",
+   "in": 938,
+   "chars": 2773
+  },
+  {
+   "doc_id": "SYN05",
+   "in": 894,
+   "chars": 2661
+  },
+  {
+   "doc_id": "SYN06",
+   "in": 974,
+   "chars": 2752
+  },
+  {
+   "doc_id": "SYN07",
+   "in": 885,
+   "chars": 2596
+  },
+  {
+   "doc_id": "SYN08",
+   "in": 975,
+   "chars": 2790
+  },
+  {
+   "doc_id": "SYN09",
+   "in": 964,
+   "chars": 2645
+  },
+  {
+   "doc_id": "SYN10",
+   "in": 939,
+   "chars": 2703
+  },
+  {
+   "doc_id": "SYN11",
+   "in": 1063,
+   "chars": 3100
+  },
+  {
+   "doc_id": "SYN12",
+   "in": 936,
+   "chars": 2757
+  },
+  {
+   "doc_id": "SYN13",
+   "in": 891,
+   "chars": 2579
+  },
+  {
+   "doc_id": "SYN14",
+   "in": 866,
+   "chars": 2529
+  },
+  {
+   "doc_id": "SYN15",
+   "in": 919,
+   "chars": 2614
+  },
+  {
+   "doc_id": "SYN16",
+   "in": 882,
+   "chars": 2521
+  },
+  {
+   "doc_id": "SYN17",
+   "in": 833,
+   "chars": 2441
+  },
+  {
+   "doc_id": "SYN18",
+   "in": 1412,
+   "chars": 4438
+  },
+  {
+   "doc_id": "SYN19",
+   "in": 869,
+   "chars": 2507
+  },
+  {
+   "doc_id": "SYN20",
+   "in": 944,
+   "chars": 2659
+  },
+  {
+   "doc_id": "SYN21",
+   "in": 885,
+   "chars": 2579
+  },
+  {
+   "doc_id": "SYN22",
+   "in": 918,
+   "chars": 2675
+  },
+  {
+   "doc_id": "SYN23",
+   "in": 951,
+   "chars": 2780
+  },
+  {
+   "doc_id": "SYN24",
+   "in": 910,
+   "chars": 2675
+  }
+ ],
+ "runs": 3
+}

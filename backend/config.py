@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # LLM Configuration
     PRIMARY_LLM_MODEL: str = Field(
-        default="claude-3-haiku-20240307",
+        default="claude-haiku-5-5",
         env="PRIMARY_LLM_MODEL"
     )
     SECONDARY_LLM_MODEL: str = Field(

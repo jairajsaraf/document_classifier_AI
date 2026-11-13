@@ -25,7 +25,6 @@ class ClassificationCategory(str, Enum):
     PUBLIC = "Public"
     CONFIDENTIAL = "Confidential"
     HIGHLY_SENSITIVE = "Highly Sensitive"
-    UNSAFE = "Unsafe"
 
 
 class Document(Base):
@@ -53,7 +52,8 @@ class Document(Base):
     error_message = Column(Text, nullable=True)
 
     # Classification results
-    primary_category = Column(SQLEnum(ClassificationCategory), nullable=True)
+    primary_category = Column(SQLEnum(ClassificationCategory), nullable=True)  # sensitivity level
+    unsafe = Column(Boolean, nullable=True)
     secondary_categories = Column(String(500), nullable=True)  # JSON array
     confidence_score = Column(Float, nullable=True)
     requires_review = Column(Boolean, default=False)

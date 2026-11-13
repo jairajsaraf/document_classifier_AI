@@ -27,6 +27,8 @@ class Feedback(Base):
     feedback_type = Column(SQLEnum(FeedbackType), nullable=False)
     original_category = Column(String(50), nullable=True)
     corrected_category = Column(String(50), nullable=True)
+    original_unsafe = Column(Boolean, nullable=True)
+    corrected_unsafe = Column(Boolean, nullable=True)
 
     # User input
     reviewer_name = Column(String(100), nullable=False)

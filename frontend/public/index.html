@@ -676,7 +676,7 @@
             resultsContainer.style.display = 'grid';
             resultsContainer.classList.add('fade-in');
 
-            const category = data.category || 'Unknown';
+            const category = data.sensitivity || 'Unknown';
             const confidence = data.confidence || 0;
             const summary = data.summary || 'No summary available';
 
@@ -687,6 +687,7 @@
                 <div class="category-badge category-${categoryClass}">
                     ${category}
                 </div>
+                ${data.unsafe ? '<div class="category-badge category-unsafe">Unsafe</div>' : ''}
 
                 <div class="confidence-meter">
                     <div class="confidence-label">
@@ -761,7 +762,7 @@
                                 <div>
                                     <div style="font-weight: 600; margin-bottom: 0.25rem;">📄 ${doc.filename}</div>
                                     <div style="font-size: 0.85rem; color: #64748b;">
-                                        ${doc.category || 'Pending'} • ${doc.confidence ? (doc.confidence * 100).toFixed(0) + '%' : 'N/A'}
+                                        ${doc.sensitivity || 'Pending'}${doc.unsafe ? ' + Unsafe' : ''} • ${doc.confidence ? (doc.confidence * 100).toFixed(0) + '%' : 'N/A'}
                                     </div>
                                 </div>
                                 <div style="font-size: 0.85rem; color: #64748b;">
@@ -795,11 +796,12 @@
 
             if (data.classification) {
                 const classification = data.classification;
-                const category = classification.category || 'Unknown';
+                const category = classification.sensitivity || 'Unknown';
                 const categoryClass = category.toLowerCase().replace(/ /g, '-');
 
                 document.getElementById('resultsContent').innerHTML = `
                     <div class="category-badge category-${categoryClass}">${category}</div>
+                    ${classification.unsafe ? '<div class="category-badge category-unsafe">Unsafe</div>' : ''}
 
                     <div class="confidence-meter">
                         <div class="confidence-label">

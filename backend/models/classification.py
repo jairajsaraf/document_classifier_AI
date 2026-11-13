@@ -2,7 +2,7 @@
 Classification models for storing classification results and evidence
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Float, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Float, Text, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import relationship
 from .document import Base
 
@@ -15,7 +15,8 @@ class Classification(Base):
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
 
     # Classification details
-    category = Column(String(50), nullable=False)
+    category = Column(String(50), nullable=False)  # sensitivity level
+    unsafe = Column(Boolean, nullable=True)
     confidence_score = Column(Float, nullable=False)
     reasoning = Column(Text, nullable=False)
     summary = Column(Text, nullable=False)

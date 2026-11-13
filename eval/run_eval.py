@@ -75,6 +75,11 @@ def pii_norm(kind, value):
     return d[-10:] if kind == "PHONE" else d
 
 
+def pred_unsafe(r):
+    """New records carry the `unsafe` field; baseline records could only say category == Unsafe."""
+    return r["unsafe"] is True if "unsafe" in r else r["category"] == "Unsafe"
+
+
 def _n(s):
     return re.sub(r"\s+", " ", s or "").strip().casefold()
 
@@ -149,8 +154,10 @@ def classify_one(clf, calls, last, row, run):
         cites.append(rec)
     pii = [{"type": d["type"], "norm": pii_norm(PII_MAP.get(d["type"], d["type"]), d["full_value"]),
             "page": d.get("page_number")} for d in (r.get("pii_results") or {}).get("detections", [])]
-    return {"doc_id": row["doc_id"], "run": run, "status": r.get("status"), "category": canon(r.get("category")),
-            "raw_category": r.get("category"), "confidence": r.get("confidence"), "error": r.get("error"),
+    # "category" holds the sensitivity level; baseline records (old output shape) may hold "Unsafe" there
+    sens = r.get("sensitivity", r.get("category"))
+    return {"doc_id": row["doc_id"], "run": run, "status": r.get("status"), "category": canon(sens),
+            "raw_category": sens, "unsafe": r.get("unsafe"), "confidence": r.get("confidence"), "error": r.get("error"),
             "regex_unsafe": (r.get("safety_results") or {}).get("is_safe") is False,
             "reasoning": (r.get("reasoning") or "")[:300], "citations": cites, "pii": pii,
             "calls": list(calls), "cost": cost(calls), "api_seconds": sum(k["seconds"] for k in calls),
@@ -176,7 +183,8 @@ def cmd_estimate(args):
         n = (counter.messages.count_tokens(model=kw["model"], messages=kw["messages"]).input_tokens
              if counter else round(len(text) / 3.5))
         calls.append({"seconds": 0, "in": n, "out": 0, "stop": "estimate", "prompt_chars": len(text)})
-        body = json.dumps({"category": "Public", "confidence": 0.9, "summary": "", "reasoning": "", "citations": []})
+        body = json.dumps({"sensitivity": "Public", "unsafe": False, "confidence": 0.9, "summary": "",
+                           "reasoning": "", "citations": []})
         return SimpleNamespace(content=[SimpleNamespace(type="text", text=body)], stop_reason="end_turn",
                                usage=SimpleNamespace(input_tokens=n, output_tokens=0))
     instrument(clf, calls, last, create=fake_create)
@@ -188,12 +196,9 @@ def cmd_estimate(args):
         if calls:
             print(f"{row['doc_id']:7}{calls[0]['prompt_chars']:>14}{calls[0]['in']:>14}")
             out.append({"doc_id": row["doc_id"], "in": calls[0]["in"], "chars": calls[0]["prompt_chars"]})
-        else:
-            if r.get("status") != "blocked":  # only the safety short-circuit may legitimately skip the LLM
-                sys.exit(f"{row['doc_id']}: processing failed before the LLM call ({r.get('error')}); "
-                         "refusing to report a partial estimate")
-            print(f"{row['doc_id']:7}{'-':>14}{'-':>14}  no LLM call (blocked by the safety short-circuit)")
-            out.append({"doc_id": row["doc_id"], "in": 0, "chars": 0, "status": "blocked"})
+        else:  # every document reaches the LLM now that the safety short-circuit is gone
+            sys.exit(f"{row['doc_id']}: processing failed before the LLM call ({r.get('error')}); "
+                     "refusing to report a partial estimate")
     tin = sum(o["in"] for o in out)
     nruns = args.runs
     ri, ro = RATE_SHORT
@@ -258,9 +263,9 @@ def pct(a, b):
     return "n/a" if b == 0 else f"{100 * a / b:.0f}% ({a}/{b})"
 
 
-def load_records():
+def load_records(d=None):
     recs = []
-    for p in sorted(RUNS.glob("run*.jsonl")):
+    for p in sorted(Path(d or RUNS).glob("run*.jsonl")):
         recs += [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
     return recs
 
@@ -285,7 +290,8 @@ def group_section(name, rows, recs):
     for r in rs:
         cm[ids[r["doc_id"]]["sensitivity"]][r["category"]] += 1
     L += ["Sensitivity confusion matrix (rows = golden, columns = predicted; pooled over runs). "
-          "`Unsafe` = the classifier returned category Unsafe, `Other` = Unknown/failed.", "",
+          "`Unsafe` = category Unsafe replaced the sensitivity (baseline output shape only), "
+          "`Other` = Unknown/failed.", "",
           "| golden \\ predicted | " + " | ".join(cols) + " | recall |", "|---|" + "---|" * (len(cols) + 1)]
     for t in SENS:
         n = sum(cm[t].values())
@@ -306,8 +312,8 @@ def group_section(name, rows, recs):
     pos = {i for i, r in ids.items() if r["unsafe"] == "yes"}
     L += ["", "Unsafe detection (pooled over runs):", "",
           "| signal | precision | recall | note |", "|---|---|---|---|"]
-    for label, pred, note in [("category == Unsafe (shipped output)", lambda r: r["category"] == "Unsafe",
-                               "regex short-circuit or LLM category"),
+    for label, pred, note in [("shipped output (`unsafe` field; baseline: category == Unsafe)", pred_unsafe,
+                               "the LLM's decision"),
                               ("regex safety flag raised", lambda r: r["regex_unsafe"],
                                "secondary: any flag, even if not blocked")]:
         tp = sum(1 for r in rs if pred(r) and r["doc_id"] in pos)
@@ -398,6 +404,28 @@ def cmd_report(args):
     return text
 
 
+def cmd_compare(args):
+    """Per-document correct runs, base dir -> this dir. PLAN gate: a win fixes >= 2 docs in all runs."""
+    base, new = load_records(args.base), load_records()
+    L = ["| doc | golden sensitivity | golden unsafe | sensitivity correct: base -> new | unsafe correct: base -> new |",
+         "|---|---|---|---|---|"]
+    for row in load_golden():
+        def score(recs):
+            rs = [r for r in recs if r["doc_id"] == row["doc_id"]]
+            return (sum(r["category"] == row["sensitivity"] for r in rs),
+                    sum(pred_unsafe(r) == (row["unsafe"] == "yes") for r in rs), len(rs))
+        (bs, bu, bn), (ns, nu, nn) = score(base), score(new)
+
+        def cell(b, n):
+            tag = " **fixed**" if b < bn and n == nn else " **regressed**" if b == bn and n < nn else ""
+            return f"{b}/{bn} -> {n}/{nn}{tag}"
+        L.append(f"| {row['doc_id']} | {row['sensitivity']} | {row['unsafe']} | {cell(bs, ns)} | {cell(bu, nu)} |")
+    text = "\n".join(L)
+    if args.out:
+        Path(args.out).write_text(text + "\n", encoding="utf-8")
+    return text
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -407,10 +435,12 @@ if __name__ == "__main__":
     r.add_argument("--dir", help="output directory (default eval/runs; refuses if it already holds results)")
     r.add_argument("--resume", action="store_true", help="finish an interrupted run of the same code/setup")
     p = sub.add_parser("report"); p.add_argument("--out"); p.add_argument("--dir")
+    c = sub.add_parser("compare"); c.add_argument("--base", default=str(RUNS)); c.add_argument("--dir")
+    c.add_argument("--out")
     a = ap.parse_args()
     if a.dir:
         RUNS = Path(a.dir).resolve()
-    if a.cmd == "report":
-        print(cmd_report(a))
+    if a.cmd in ("report", "compare"):
+        print({"report": cmd_report, "compare": cmd_compare}[a.cmd](a))
     else:
         {"estimate": cmd_estimate, "run": cmd_run}[a.cmd](a)

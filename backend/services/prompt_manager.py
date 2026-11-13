@@ -168,7 +168,8 @@ class PromptManager:
 
         # Format the prompt with primary results
         prompt = base_prompt.format(
-            primary_category=primary_classification.get("category", "Unknown"),
+            primary_category=f"{primary_classification.get('sensitivity', 'Unknown')}, "
+                             f"unsafe={primary_classification.get('unsafe')}",
             primary_confidence=primary_classification.get("confidence", 0),
             primary_reasoning=primary_classification.get("reasoning", "")
         )
@@ -198,7 +199,8 @@ class PromptManager:
 
         confidence = classification_result.get("confidence", 1.0)
         pii_detected = pii_result.get("pii_detected", False)
-        safety_flags = not safety_result.get("is_safe", True)
+        # docx: "automatically detect Unsafe content and flag for human review"
+        safety_flags = not safety_result.get("is_safe", True) or classification_result.get("unsafe") is True
 
         # Check each trigger condition
         for trigger in hitl_triggers:
@@ -215,8 +217,7 @@ class PromptManager:
                     })
 
             elif "pii_detected" in condition and "public_indicators" in condition:
-                category = classification_result.get("category", "")
-                if pii_detected and category == "Public":
+                if pii_detected and classification_result.get("sensitivity") == "Public":
                     triggered.append({
                         "condition": condition,
                         "reason": reason
@@ -246,6 +247,8 @@ class PromptManager:
             formatted.append(f"Keywords: {', '.join(cat_info.get('keywords', []))}")
             formatted.append("")
 
+        formatted.append("### Unsafe flag (independent of the sensitivity level)")
+        formatted.append(self.prompt_library.get("unsafe_definition", ""))
         return "\n".join(formatted)
 
     def _get_citation_instructions(self) -> str:
@@ -257,7 +260,8 @@ class PromptManager:
         """Get expected JSON response format"""
         return """
 {
-  "category": "Primary classification category",
+  "sensitivity": "Public | Confidential | Highly Sensitive",
+  "unsafe": false,
   "confidence": 0.95,
   "summary": "Brief summary of the document",
   "reasoning": "Detailed explanation of classification decision",

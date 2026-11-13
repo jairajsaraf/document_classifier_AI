@@ -14,6 +14,13 @@ from backend.services.document_processor import DocumentProcessor
 from backend.services.pii_detector import PIIDetector
 from backend.services.content_safety import ContentSafetyChecker
 
+SENSITIVITY_LEVELS = ("Public", "Confidential", "Highly Sensitive")
+
+
+def _as_bool(v) -> bool:
+    """The model may answer true/false or "yes"/"no"."""
+    return v is True or str(v).strip().lower() in ("true", "yes")
+
 
 class DocumentClassifier:
     """Main classification engine using LLMs"""
@@ -81,19 +88,8 @@ class DocumentClassifier:
 
             # Step 4: Content Safety Check
             logger.info("Step 4: Checking content safety...")
+            # Regex flags are a hint to the LLM and a HITL trigger; they never replace the sensitivity label
             safety_results = self.safety_checker.check_pages_safety(doc_content["pages"])
-
-            # Block if critical safety issues
-            if self.safety_checker.should_block_document(safety_results):
-                return {
-                    "status": "blocked",
-                    "category": "Unsafe",
-                    "confidence": 1.0,
-                    "reasoning": "Document blocked due to critical safety violations",
-                    "summary": "Unsafe content detected",
-                    "safety_results": safety_results,
-                    "document_metadata": self._extract_metadata(doc_content)
-                }
 
             # Step 5: Primary Classification
             logger.info("Step 5: Running primary classification...")
@@ -104,6 +100,9 @@ class DocumentClassifier:
                 safety_results,
                 model=settings.PRIMARY_LLM_MODEL
             )
+            if primary_result.get("sensitivity") not in SENSITIVITY_LEVELS:
+                raise ValueError(f"model returned no valid sensitivity: {primary_result.get('sensitivity')!r}")
+            primary_result["unsafe"] = _as_bool(primary_result.get("unsafe"))
 
             # Step 6: Dual Verification (if enabled)
             verification_result = None
@@ -147,7 +146,8 @@ class DocumentClassifier:
             # Compile final result
             final_result = {
                 "status": "completed",
-                "category": primary_result.get("category"),
+                "sensitivity": primary_result["sensitivity"],
+                "unsafe": primary_result["unsafe"],
                 "confidence": primary_result.get("confidence"),
                 "reasoning": primary_result.get("reasoning"),
                 "summary": primary_result.get("summary"),
@@ -161,7 +161,7 @@ class DocumentClassifier:
             }
 
             logger.info(
-                f"Classification complete: {final_result['category']} "
+                f"Classification complete: {final_result['sensitivity']}, unsafe={final_result['unsafe']} "
                 f"(confidence: {final_result['confidence']:.2f})"
             )
 
@@ -312,7 +312,7 @@ class DocumentClassifier:
             logger.warning("Could not parse JSON response, using fallback")
             # Fallback parsing
             return {
-                "category": "Unknown",
+                "sensitivity": "Unknown",
                 "confidence": 0.5,
                 "reasoning": response,
                 "summary": "Could not parse structured response",
@@ -372,7 +372,8 @@ class DocumentClassifier:
             Float between 0 and 1
         """
         # Category agreement (most important)
-        category_match = 1.0 if primary.get("category") == secondary.get("category") else 0.0
+        category_match = 1.0 if (primary.get("sensitivity"), primary.get("unsafe")) == (
+            secondary.get("sensitivity"), _as_bool(secondary.get("unsafe"))) else 0.0
 
         # Confidence similarity
         conf_primary = primary.get("confidence", 0.5)

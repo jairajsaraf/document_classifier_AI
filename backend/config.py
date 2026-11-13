@@ -47,7 +47,7 @@ class Settings(BaseSettings):
         default="gpt-3.5-turbo",
         env="SECONDARY_LLM_MODEL"
     )
-    USE_DUAL_VERIFICATION: bool = Field(default=True, env="USE_DUAL_VERIFICATION")
+    USE_DUAL_VERIFICATION: bool = Field(default=False, env="USE_DUAL_VERIFICATION")
     CONFIDENCE_THRESHOLD: float = Field(default=0.85, env="CONFIDENCE_THRESHOLD")
     MAX_TOKENS: int = Field(default=4096, env="MAX_TOKENS")
     TEMPERATURE: float = Field(default=0.1, env="TEMPERATURE")
@@ -77,8 +77,7 @@ class Settings(BaseSettings):
         default=[
             "Public",
             "Confidential",
-            "Highly Sensitive",
-            "Unsafe"
+            "Highly Sensitive"
         ]
     )
 

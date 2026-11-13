@@ -2,7 +2,7 @@
 Main FastAPI Application
 Regulatory Document Classifier API
 """
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import uvicorn
 import os
-import shutil
+import uuid
 from datetime import datetime
 from loguru import logger
 from pathlib import Path
@@ -89,13 +89,10 @@ async def health_check():
 @app.post("/api/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
 ):
     """
-    Upload a document for classification
-
-    This endpoint handles file upload and initiates the classification process.
+    Upload a document. Classify it with POST /api/documents/{id}/classify.
     """
     try:
         # Validate file size
@@ -111,16 +108,15 @@ async def upload_document(
             )
 
         # Validate file extension
-        file_ext = os.path.splitext(file.filename)[1].lower().replace('.', '')
+        file_ext = os.path.splitext(file.filename or "")[1].lower().replace('.', '')
         if file_ext not in settings.ALLOWED_EXTENSIONS:
             raise HTTPException(
                 status_code=400,
                 detail=f"File type '{file_ext}' not allowed. Allowed types: {settings.ALLOWED_EXTENSIONS}"
             )
 
-        # Generate unique filename
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        safe_filename = f"{timestamp}_{file.filename}"
+        # Generated name: the client filename is stored as data only, never used in the path
+        safe_filename = f"{uuid.uuid4().hex}.{file_ext}"
         file_path = os.path.join(settings.UPLOAD_DIR, safe_filename)
 
         # Save file
@@ -153,15 +149,11 @@ async def upload_document(
 
         logger.info(f"Document uploaded: {file.filename} (ID: {doc.id})")
 
-        # Start classification in background
-        if background_tasks:
-            background_tasks.add_task(classify_document_background, doc.id, file_path, db)
-
         return {
             "document_id": doc.id,
             "filename": file.filename,
             "status": doc.status.value,
-            "message": "Document uploaded successfully. Classification started."
+            "message": f"Document uploaded. Classify with POST /api/documents/{doc.id}/classify."
         }
 
     except HTTPException:
@@ -198,7 +190,8 @@ async def classify_document_endpoint(
         # Update document with results
         if result["status"] == "completed":
             doc.status = DocumentStatus.COMPLETED
-            doc.primary_category = ClassificationCategory[result["category"].upper().replace(" ", "_")]
+            doc.primary_category = ClassificationCategory(result["sensitivity"])
+            doc.unsafe = result["unsafe"]
             doc.confidence_score = result["confidence"]
             doc.page_count = result["document_metadata"]["page_count"]
             doc.image_count = result["document_metadata"]["image_count"]
@@ -211,12 +204,6 @@ async def classify_document_endpoint(
                 doc.requires_review = True
                 doc.status = DocumentStatus.PENDING_REVIEW
 
-        elif result["status"] == "blocked":
-            doc.status = DocumentStatus.COMPLETED
-            doc.primary_category = ClassificationCategory.UNSAFE
-            doc.confidence_score = 1.0
-            doc.requires_review = True
-
         else:
             doc.status = DocumentStatus.FAILED
             doc.error_message = result.get("error", "Unknown error")
@@ -225,10 +212,11 @@ async def classify_document_endpoint(
         db.commit()
 
         # Save classification results
-        if result["status"] in ["completed", "blocked"]:
+        if result["status"] == "completed":
             classification = Classification(
                 document_id=doc.id,
-                category=result["category"],
+                category=result["sensitivity"],
+                unsafe=result["unsafe"],
                 confidence_score=result["confidence"],
                 reasoning=result["reasoning"],
                 summary=result["summary"],
@@ -251,7 +239,7 @@ async def classify_document_endpoint(
                     evidence_text=citation.get("evidence_text"),
                     evidence_description=citation.get("relevance", ""),
                     relevance_score=citation.get("relevance_score", 0.8),
-                    supporting_category=result["category"]
+                    supporting_category=result["sensitivity"]
                 )
                 db.add(evidence)
 
@@ -262,16 +250,20 @@ async def classify_document_endpoint(
             action="document_classification",
             entity_type="document",
             entity_id=doc.id,
-            description=f"Document classified as: {result.get('category', 'Unknown')}",
-            success=result["status"] in ["completed", "blocked"]
+            description=f"Document classified as: {result.get('sensitivity', 'failed')}, unsafe={result.get('unsafe')}",
+            success=result["status"] == "completed"
         )
         db.add(audit)
         db.commit()
 
+        if result["status"] != "completed":
+            raise RuntimeError(result.get("error", "Unknown error"))  # categorised by the handler below
+
         return {
             "document_id": doc.id,
             "status": doc.status.value,
-            "category": result.get("category"),
+            "sensitivity": result["sensitivity"],
+            "unsafe": result["unsafe"],
             "confidence": result.get("confidence"),
             "summary": result.get("summary"),
             "requires_review": doc.requires_review,
@@ -331,34 +323,6 @@ async def classify_document_endpoint(
             }
         )
 
-def classify_document_background(document_id: int, file_path: str, db: Session):
-    """Background task for document classification"""
-    try:
-        logger.info(f"Starting background classification for document {document_id}")
-
-        # Get document
-        doc = db.query(Document).filter(Document.id == document_id).first()
-        if not doc:
-            logger.error(f"Document {document_id} not found")
-            return
-
-        # Update status
-        doc.status = DocumentStatus.CLASSIFYING
-        doc.processing_started_at = datetime.utcnow()
-        db.commit()
-
-        # Run classification
-        classifier = DocumentClassifier()
-        result = classifier.classify_document(file_path)
-
-        # Update document (same logic as classify_document_endpoint)
-        # ... (similar code to above)
-
-        logger.info(f"Background classification completed for document {document_id}")
-
-    except Exception as e:
-        logger.error(f"Background classification failed: {e}")
-
 @app.get("/api/documents/{document_id}")
 async def get_document(document_id: int, db: Session = Depends(get_db)):
     """Get document details and classification results"""
@@ -389,7 +353,9 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
             "created_at": doc.created_at.isoformat()
         },
         "classification": {
-            "category": classification.category if classification else None,
+            # effective (reviewed) values; the model's original stays in classifications + feedback.original_*
+            "sensitivity": doc.primary_category.value if doc.primary_category else classification.category,
+            "unsafe": doc.unsafe,
             "confidence": classification.confidence_score if classification else None,
             "summary": classification.summary if classification else None,
             "reasoning": classification.reasoning if classification else None,
@@ -428,7 +394,8 @@ async def list_documents(
                 "id": doc.id,
                 "filename": doc.original_filename,
                 "status": doc.status.value,
-                "category": doc.primary_category.value if doc.primary_category else None,
+                "sensitivity": doc.primary_category.value if doc.primary_category else None,
+                "unsafe": doc.unsafe,
                 "confidence": doc.confidence_score,
                 "requires_review": doc.requires_review,
                 "created_at": doc.created_at.isoformat()
@@ -445,6 +412,7 @@ async def submit_feedback(
     feedback_type: str,
     reviewer_name: str,
     corrected_category: Optional[str] = None,
+    corrected_unsafe: Optional[bool] = None,
     comments: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
@@ -467,14 +435,19 @@ async def submit_feedback(
             feedback_type=FeedbackType[feedback_type.upper()],
             original_category=classification.category if classification else None,
             corrected_category=corrected_category,
+            original_unsafe=classification.unsafe if classification else None,
+            corrected_unsafe=corrected_unsafe,
             reviewer_name=reviewer_name,
             comments=comments
         )
         db.add(feedback)
 
         # Update document if corrected
-        if corrected_category:
-            doc.primary_category = ClassificationCategory[corrected_category.upper().replace(" ", "_")]
+        if corrected_unsafe is not None:
+            doc.unsafe = corrected_unsafe
+        if corrected_category or corrected_unsafe is not None:
+            if corrected_category:
+                doc.primary_category = ClassificationCategory[corrected_category.upper().replace(" ", "_")]
             doc.reviewed_by = reviewer_name
             doc.reviewed_at = datetime.utcnow()
             doc.requires_review = False

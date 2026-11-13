@@ -4,8 +4,8 @@
 # Base System Prompt
 system_prompt: |
   You are an expert document classification assistant specializing in regulatory compliance
-  and data sensitivity analysis. Your task is to analyze documents and classify them into
-  one of the following categories: Public, Confidential, Highly Sensitive, or Unsafe.
+  and data sensitivity analysis. Your task is to analyze documents and assign two independent labels:
+  a sensitivity level (Public, Confidential, or Highly Sensitive) and an unsafe flag (true or false).
 
   You must provide detailed reasoning and cite specific evidence from the document.
 
@@ -60,22 +60,8 @@ categories:
       - Defense/military schematics
       - Proprietary technical designs
 
-  Unsafe:
-    description: "Content violating child safety, hate speech, violence, criminal activity, or cyber threats"
-    keywords:
-      - violence
-      - hate speech
-      - child exploitation
-      - criminal
-      - terrorism
-      - cyber threat
-      - malware
-    indicators:
-      - Child safety violations
-      - Hate speech or discriminatory content
-      - Violent or exploitative content
-      - Criminal instructions
-      - Cyber attack methodologies
+# Unsafe flag: independent of sensitivity. Verbatim from the challenge docx ("Unsafe Content" line).
+unsafe_definition: "Unsafe Content: In any case all content should be evaluated for Child Safety and should not include Hate speech, exploitative, violent, criminal, political news or cyber-threat content."
 
 # Classification Prompts
 classification_prompts:
@@ -124,7 +110,7 @@ classification_prompts:
 
   final_classification: |
     Based on all previous analyses, provide:
-    1. Primary classification category
+    1. Sensitivity level, and separately whether the content is unsafe
     2. Confidence score (0-1)
     3. Detailed reasoning
     4. Summary of findings

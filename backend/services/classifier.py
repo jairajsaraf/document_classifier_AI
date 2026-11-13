@@ -259,12 +259,12 @@ class DocumentClassifier:
             message = self.anthropic_client.messages.create(
                 model=model,
                 max_tokens=settings.MAX_TOKENS,
-                temperature=settings.TEMPERATURE,
                 messages=[
                     {"role": "user", "content": prompt}
                 ]
             )
-            return message.content[0].text
+            # Haiku 5.5 may lead with a thinking block: read text blocks by type
+            return "".join(b.text for b in message.content if b.type == "text")
         except Exception as e:
             logger.error(f"Anthropic API call failed: {e}")
             raise

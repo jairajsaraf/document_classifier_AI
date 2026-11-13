@@ -1,0 +1,50 @@
+doc_id,page,entity_type,value,modality,is_pii,note
+SYN01,3,EMAIL,sales@lumenfield.example.com,text,no,business contact; not personal PII (user-confirmed 2026-11-13)
+SYN01,3,PHONE,(312) 555-0142,text,no,business contact; not personal PII (user-confirmed 2026-11-13)
+SYN01,3,ADDRESS,"400 Harbor Way, Fernhollow, OR 97001",text,no,business contact; not personal PII (user-confirmed 2026-11-13)
+SYN02,1,ORDER_ID,917-42-3086,text,no,order ID shaped like an SSN; not PII
+SYN02,2,ORDER_ID,904-77-1520,text,no,order ID shaped like an SSN; not PII
+SYN04,2,PERSON,Dana Whitcombe,text,no,fictional public figure in news; not PII (user-confirmed 2026-11-13)
+SYN04,2,EMAIL,press@northgate.example.com,text,no,business contact; not personal PII (user-confirmed 2026-11-13)
+SYN06,4,PHONE,(312) 555-0188,text,no,business contact; not personal PII (user-confirmed 2026-11-13)
+SYN06,4,EMAIL,help@brightleaf.example.com,text,no,business contact; not personal PII (user-confirmed 2026-11-13)
+SYN07,1,EMAIL,careers@tidewell.example.com,text,no,business contact; not personal PII (user-confirmed 2026-11-13)
+SYN07,1,ADDRESS,"88 Copperleaf Dr, Millbrook Falls, WI 53001",text,no,business contact; not personal PII (user-confirmed 2026-11-13)
+SYN09,1,PERSON,Linden Marlowe,text,yes,
+SYN09,1,ADDRESS,"8223 Juniper Ct, Cedar Glen, NM 32237",text,yes,
+SYN09,1,PERSON,Rowan Vasquez-Lind,text,yes,
+SYN09,1,ADDRESS,"4699 Harbor Way, Millbrook Falls, WI 30451",text,yes,
+SYN09,1,PERSON,Marisol Castellan,text,yes,
+SYN09,1,ADDRESS,"104 Old Mill Rd, Cedar Glen, NM 69902",text,yes,
+SYN09,1,PERSON,Elliot Hollister,text,yes,
+SYN09,1,ADDRESS,"6737 Old Mill Rd, Millbrook Falls, WI 56162",text,yes,
+SYN09,1,PERSON,Devon Okafor-Reyes,text,yes,
+SYN09,1,ADDRESS,"933 Old Mill Rd, Cedar Glen, NM 16875",text,yes,
+SYN10,2,ORDER_ID,990-87-2598,text,no,order ID shaped like an SSN; not PII
+SYN10,2,ORDER_ID,969-58-5884,text,no,order ID shaped like an SSN; not PII
+SYN10,2,ORDER_ID,944-10-5743,text,no,order ID shaped like an SSN; not PII
+SYN11,5,PERSON,Kendall Prewitt,text,yes,
+SYN11,5,ADDRESS,"6784 Juniper Ct, Cedar Glen, NM 66953",text,yes,
+SYN13,2,PERSON,Quinn Marlowe,image,yes,
+SYN13,2,ADDRESS,"6453 Birchwood Ln, Millbrook Falls, WI 37750",image,yes,
+SYN15,1,PERSON,Rowan Prewitt,text,yes,
+SYN15,1,ADDRESS,"9182 Juniper Ct, Millbrook Falls, WI 23886",text,yes,
+SYN15,1,PHONE,(312) 555-0189,text,yes,
+SYN15,1,DATE_OF_BIRTH,08/28/1969,text,yes,
+SYN15,1,SSN,982-57-5483,text,yes,
+SYN16,1,PERSON,Devon Prewitt,text,yes,
+SYN16,1,ADDRESS,"3578 Copperleaf Dr, Cedar Glen, NM 25948",text,yes,
+SYN16,1,ACCOUNT_NUMBER,0870456292,text,yes,
+SYN17,1,PERSON,Sasha Prewitt,text,yes,
+SYN17,1,CREDIT_CARD,4111 1111 1111 1111,text,yes,published test card number
+SYN18,1,PERSON,Morgan Castellan,text,yes,
+SYN18,6,SSN,959-75-9940,text,yes,
+SYN19,2,PERSON,Kendall Quillfeather,image,yes,
+SYN19,2,SSN,933-64-2624,image,yes,
+SYN21,1,CREDIT_CARD,5555 5555 5555 4444,text,yes,published test card number
+SYN21,1,CREDIT_CARD,4000 0566 5566 5556,text,yes,published test card number
+SYN22,2,PHONE,(312) 555-0117,text,no,business contact; not personal PII (user-confirmed 2026-11-13)
+SYN23,1,PERSON,Jordan Prewitt,text,yes,
+SYN23,1,PERSON,Marisol Vasquez-Lind,text,yes,
+SYN24,1,PERSON,Kendall Marlowe,text,yes,
+SYN24,1,SSN,981-44-5741,text,yes,

@@ -131,8 +131,10 @@ False-Public on TC3/TC4, the safety short-circuit hiding sensitivity, the look-a
 docker build -t docclf-eval .
 # key passed through the environment; an empty file hides .env so the defaults apply
 docker run --rm -e ANTHROPIC_API_KEY -v "$PWD":/app -v <empty-file>:/app/.env:ro -w /app docclf-eval \
-  python eval/run_eval.py run --runs 3
+  python eval/run_eval.py run --runs 3 --dir eval/runs_repro
 ```
+
+`run` refuses to write into a directory that already holds results (`eval/runs/` is the committed baseline), so a rerun cannot be mistaken for a fresh evaluation. `--resume` finishes an interrupted run of the same setup only.
 
 
 ---

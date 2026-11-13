@@ -159,6 +159,8 @@ def classify_one(clf, calls, last, row, run):
 
 # ---------------------------------------------------------------- estimate (no generation)
 def cmd_estimate(args):
+    if not args.skip_regen:
+        regenerate_pdfs()  # synthetic PDFs are not committed; without them every synthetic doc would fail
     settings, clf = build_classifier()
     rows = load_golden()
     counter = None
@@ -187,8 +189,11 @@ def cmd_estimate(args):
             print(f"{row['doc_id']:7}{calls[0]['prompt_chars']:>14}{calls[0]['in']:>14}")
             out.append({"doc_id": row["doc_id"], "in": calls[0]["in"], "chars": calls[0]["prompt_chars"]})
         else:
-            print(f"{row['doc_id']:7}{'-':>14}{'-':>14}  no LLM call ({r.get('status')}: safety short-circuit or failure)")
-            out.append({"doc_id": row["doc_id"], "in": 0, "chars": 0, "status": r.get("status")})
+            if r.get("status") != "blocked":  # only the safety short-circuit may legitimately skip the LLM
+                sys.exit(f"{row['doc_id']}: processing failed before the LLM call ({r.get('error')}); "
+                         "refusing to report a partial estimate")
+            print(f"{row['doc_id']:7}{'-':>14}{'-':>14}  no LLM call (blocked by the safety short-circuit)")
+            out.append({"doc_id": row["doc_id"], "in": 0, "chars": 0, "status": "blocked"})
     tin = sum(o["in"] for o in out)
     nruns = args.runs
     ri, ro = RATE_SHORT
@@ -199,7 +204,7 @@ def cmd_estimate(args):
     for k, v in OUT_TOKENS.items():
         calls_n = sum(1 for o in out if o["in"]) * nruns
         print(f"  output assumption {k:4} ({v} tok/call): ${tin * nruns * ri + calls_n * v * ro:.3f}")
-    RUNS.mkdir(exist_ok=True)
+    RUNS.mkdir(parents=True, exist_ok=True)
     (RUNS / "estimate.json").write_text(json.dumps({"method": "offline" if args.offline else "count_tokens",
                                                    "docs": out, "runs": nruns}, indent=1))
 
@@ -215,11 +220,22 @@ def cmd_run(args):
     rows = load_golden()
     calls, last = [], {}
     instrument(clf, calls, last)
-    RUNS.mkdir(exist_ok=True)
+    RUNS.mkdir(parents=True, exist_ok=True)
     meta = {"model": settings.PRIMARY_LLM_MODEL, "sdk": anthropic.__version__, "python": sys.version.split()[0],
             "pdf_set_hash": pdf_set_hash(), "dual_verification": False, "runs": args.runs,
             "started": time.strftime("%Y-%m-%d %H:%M:%S")}
-    (RUNS / "meta.json").write_text(json.dumps(meta, indent=1))
+    meta_path = RUNS / "meta.json"
+    if list(RUNS.glob("run*.jsonl")) and not args.resume:
+        # never let saved results masquerade as a fresh evaluation after code or prompt changes
+        sys.exit(f"{RUNS} already holds results. Evaluate fresh with --dir <new dir>, or finish an "
+                 "interrupted run of the SAME code with --resume.")
+    if args.resume and meta_path.exists():
+        old = json.loads(meta_path.read_text())
+        diff = [k for k in ("model", "pdf_set_hash", "dual_verification", "runs") if old.get(k) != meta[k]]
+        if diff:
+            sys.exit(f"--resume refused: {diff} differ from {meta_path}")
+    else:
+        meta_path.write_text(json.dumps(meta, indent=1))
     for run in range(1, args.runs + 1):
         path = RUNS / f"run{run}.jsonl"
         done = set()
@@ -386,9 +402,14 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("estimate"); e.add_argument("--offline", action="store_true"); e.add_argument("--runs", type=int, default=3)
+    e.add_argument("--skip-regen", action="store_true"); e.add_argument("--dir")
     r = sub.add_parser("run"); r.add_argument("--runs", type=int, default=3); r.add_argument("--skip-regen", action="store_true")
-    p = sub.add_parser("report"); p.add_argument("--out")
+    r.add_argument("--dir", help="output directory (default eval/runs; refuses if it already holds results)")
+    r.add_argument("--resume", action="store_true", help="finish an interrupted run of the same code/setup")
+    p = sub.add_parser("report"); p.add_argument("--out"); p.add_argument("--dir")
     a = ap.parse_args()
+    if a.dir:
+        RUNS = Path(a.dir).resolve()
     if a.cmd == "report":
         print(cmd_report(a))
     else:

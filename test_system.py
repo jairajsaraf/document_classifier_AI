@@ -258,3 +258,6 @@ def test_feedback_overrides_both_fields(client):
     assert r.status_code == 200, r.text
     listed = {d["id"]: d for d in client.get("/api/documents").json()["documents"]}
     assert (listed[doc_id]["sensitivity"], listed[doc_id]["unsafe"]) == ("Public", False)
+    # the detail view serves the reviewed values too (PR #3 review), not the model's original
+    got = client.get(f"/api/documents/{doc_id}").json()["classification"]
+    assert (got["sensitivity"], got["unsafe"]) == ("Public", False)

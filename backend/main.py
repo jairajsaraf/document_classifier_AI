@@ -353,8 +353,9 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
             "created_at": doc.created_at.isoformat()
         },
         "classification": {
-            "sensitivity": classification.category if classification else None,
-            "unsafe": classification.unsafe if classification else None,
+            # effective (reviewed) values; the model's original stays in classifications + feedback.original_*
+            "sensitivity": doc.primary_category.value if doc.primary_category else classification.category,
+            "unsafe": doc.unsafe,
             "confidence": classification.confidence_score if classification else None,
             "summary": classification.summary if classification else None,
             "reasoning": classification.reasoning if classification else None,

@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Records-office review desk: a barely warm grey ramp, one muted redline red.
+   Redline is kept for Highly Sensitive, unsafe and the selected citation. Light only. */
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--muted);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--muted);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--redline);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-text-2: var(--text-2);
+  --color-redline: var(--redline);
+  --color-redline-tint: var(--redline-tint);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: var(--radius);
+  --radius-xl: 12px;
+}
+
+:root {
+  --background: #f6f5f2;
+  --card: #fdfcfa;
+  --muted: #eeece7;
+  --foreground: #1f1d1a;
+  --text-2: #55504a;
+  --muted-foreground: #6b665e;
+  --primary: #1f1d1a;
+  --primary-foreground: #fdfcfa;
+  --border: rgb(31 29 26 / 0.1);
+  --input: rgb(31 29 26 / 0.18);
+  --ring: #1f1d1a; /* used at 50%: about 3.2:1 on the card, 3.1:1 on raised grey (WCAG 1.4.11 wants 3:1) */
+  --redline: #9e3328;
+  --redline-tint: rgb(158 51 40 / 0.08);
+  --radius: 8px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* best-effort quote highlight on the PDF text layer */
+.textLayer mark {
+  background: rgb(158 51 40 / 0.22);
+  color: transparent;
+  border-radius: 2px;
+}

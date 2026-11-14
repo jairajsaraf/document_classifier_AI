@@ -60,13 +60,21 @@ class Settings(BaseSettings):
     TEMPERATURE: float = Field(default=0.1, env="TEMPERATURE")
 
     # Document Processing
-    MAX_FILE_SIZE_MB: int = Field(default=50, env="MAX_FILE_SIZE_MB")
+    MAX_FILE_SIZE_MB: int = Field(default=10, env="MAX_FILE_SIZE_MB")
+    MAX_STORED_MB: int = Field(default=200, env="MAX_STORED_MB")  # all uploads together; the free disk is ephemeral and small
+    MAX_PDF_PAGES: int = Field(default=25, env="MAX_PDF_PAGES")  # TC4, the longest test case, has 18
     ALLOWED_EXTENSIONS: List[str] = Field(
         default=["pdf", "png", "jpg", "jpeg", "tiff", "doc", "docx"],
         env="ALLOWED_EXTENSIONS"
     )
     UPLOAD_DIR: str = Field(default="uploads", env="UPLOAD_DIR")
     TEMP_DIR: str = Field(default="temp", env="TEMP_DIR")
+
+    # Open-upload guard rails (backend/guard.py). Counters live in memory, so a restart resets them.
+    UPLOADS_PER_IP_PER_HOUR: int = Field(default=5, env="UPLOADS_PER_IP_PER_HOUR")
+    UPLOADS_PER_DAY: int = Field(default=100, env="UPLOADS_PER_DAY")  # global, UTC day; one upload = one paid classification
+    CLIENT_IP_HEADER: str = Field(default="", env="CLIENT_IP_HEADER")  # e.g. "true-client-ip" behind a proxy; empty = socket address
+    SEED_ON_BOOT: bool = Field(default=True, env="SEED_ON_BOOT")  # load backend/seed/seed.json into an empty database
 
     # Content Safety
     ENABLE_CONTENT_SAFETY: bool = Field(default=True, env="ENABLE_CONTENT_SAFETY")

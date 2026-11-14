@@ -107,15 +107,16 @@ class DocumentProcessor:
 
                     result["pages"].append(page_data)
 
-            # Extract images using pdf2image
+            # Render pages with pdf2image, ONE AT A TIME: all pages of an 18-page PDF at 200 dpi held
+            # together take over 500 MB and got the process OOM-killed on a 512 MB instance (docs/VERIFY.md)
             try:
-                images = convert_from_path(file_path, dpi=200)
-                result["image_count"] = len(images)
+                result["image_count"] = len(result["pages"])
 
-                for idx, image in enumerate(images, 1):
+                for idx in range(1, len(result["pages"]) + 1):
+                    image = convert_from_path(file_path, dpi=200, first_page=idx, last_page=idx)[0]
                     # Check if page has text, if not, try OCR
                     page_idx = idx - 1
-                    if page_idx < len(result["pages"]) and not result["pages"][page_idx]["has_text"]:
+                    if not result["pages"][page_idx]["has_text"]:
                         ocr_text = self._perform_ocr(image)
                         result["pages"][page_idx]["text"] = ocr_text
                         result["pages"][page_idx]["ocr_used"] = True
@@ -130,6 +131,7 @@ class DocumentProcessor:
                         "height": image.height,
                         "mode": image.mode
                     })
+                    image.close()
 
             except Exception as e:
                 logger.warning(f"Could not extract images from PDF: {e}")

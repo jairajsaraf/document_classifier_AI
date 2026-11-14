@@ -1,0 +1,318 @@
+[
+ {
+  "file": "HitachiDS_Datathon_Challenges_Package/TC1_Sample_Public_Marketing_Document.pdf",
+  "document": {
+   "filename": "TC1_Sample_Public_Marketing_Document.pdf",
+   "status": "completed",
+   "requires_review": false,
+   "page_count": 8,
+   "image_count": 8,
+   "is_legible": true,
+   "sensitivity": "Public",
+   "unsafe": false,
+   "confidence": 0.95
+  },
+  "classification": {
+   "summary": "A Hitachi Vantara marketing brochure for the Hitachi EverFlex Infrastructure as a Service (IaaS) portfolio. It describes service levels, pricing models, the EverFlex Control management application, the product catalog, partner offerings, and customer testimonials, and ends with a call to action for a free consultation.",
+   "reasoning": "The document is explicitly labeled 'Brochure' on every page and is written to promote the EverFlex IaaS offering to prospective customers, partners, and business leaders. It uses promotional language ('the answer', 'unparalleled flexibility and choice', 'Step Up to the Convenience and Power of Hitachi EverFlex'), includes customer testimonials intended for public persuasion, lists contact information for general inquiries, and carries a copyright and trademark footer typical of published marketing collateral. The Decision Rule requires a Public label when the document shows it was produced for general release, and this document meets that test. No Highly Sensitive indicator is present: there are no SSNs, account or card numbers, credentials, classified or defense content, proprietary schematics, personnel or application records, or minor-related material. The pricing and TCO language is generic and describes product capabilities, not non-public operational data or internal figures. Nothing indicates internal-only use. Child safety, hate speech, exploitation, violence, criminal activity, political news, and cyber-threat content are all absent, so the unsafe flag is false. The confidence is slightly below 1.0 only because the document is a PDF excerpt and the publication channel is not stated, though the brochure format and call to action make public release clear.",
+   "model": "claude-haiku-5-5",
+   "pii_detected": "0",
+   "content_safe": "1"
+  },
+  "citations": [
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "Brochure / Hitachi EverFlex Infrastructure as a Service Portfolio / Self-managed configurations to full-managed services from Hitachi Vantara or a trusted partner",
+    "description": "The cover identifies the document as a brochure with product-promotional framing, which matches the Public marketing category.",
+    "verified": false
+   },
+   {
+    "page_number": 2,
+    "evidence_type": "text",
+    "evidence_text": "The Hitachi EverFlex Infrastructure as a Service (IaaS) portfolio is the answer with flexible capacity and pay per use elastic consumption and subscriptions... EverFlex delivers unparalleled flexibility and choice.",
+    "description": "Persuasive product-benefit language aimed at prospective buyers is typical of promotional material and shows the document was written for an audience outside the company.",
+    "verified": true
+   },
+   {
+    "page_number": 3,
+    "evidence_type": "text",
+    "evidence_text": "Unlock Unmatched IT Flexibility and Efficiency with Hitachi EverFlex ... Hitachi EverFlex is available in three service levels from standard subscription self-managed to fully customized Hitachi Vantara managed offerings",
+    "description": "Describes publicly marketed service tiers and offerings rather than internal operational details, supporting the Public classification.",
+    "verified": true
+   },
+   {
+    "page_number": 4,
+    "evidence_type": "text",
+    "evidence_text": "Customer Quotes: \"EverFlex provides exceptional reliability, so we can deliver a white glove service for our customers.\" Bill Ehrman, Senior Manager, Data Storage, CBTS; \"EverFlex delivers far more flexibility than other offerings we evaluated.\" Daniel Kaiser, Head of IT Data Center at DZ BANK",
+    "description": "Attributed customer testimonials are a standard feature of public marketing collateral. They are endorsements meant for general audiences, not internal or confidential customer data.",
+    "verified": false
+   },
+   {
+    "page_number": 5,
+    "evidence_type": "text",
+    "evidence_text": "EverFlex Control is the heterogeneous SaaS infrastructure management application for the EverFlex IaaS Portfolio. It delivers a range of operational efficiencies...",
+    "description": "Describes product features in general terms for prospective customers. No internal architecture, credentials, or proprietary schematics are disclosed.",
+    "verified": true
+   },
+   {
+    "page_number": 6,
+    "evidence_type": "text",
+    "evidence_text": "Extensive Catalog of as-a-Service Offerings ... Partner Advantages with Packaged Offerings: For partners including MSPs, ISVs, Resellers, VARs and GSIs, EverFlex provides subscription and consumption offerings...",
+    "description": "Presents the product catalog and partner program as promotional offerings, consistent with public go-to-market material.",
+    "verified": false
+   },
+   {
+    "page_number": 7,
+    "evidence_type": "text",
+    "evidence_text": "Hitachi EverFlex with Cisco Powered hybrid cloud solutions are purposefully crafted to confront Hybrid Cloud challenges head-on... Business Use Case Solutions for Success",
+    "description": "Uses solution-oriented marketing language describing benefits and use cases for potential customers, without any non-public operational or financial data.",
+    "verified": true
+   },
+   {
+    "page_number": 8,
+    "evidence_type": "text",
+    "evidence_text": "Contact us today for a free consultation. ... Contact Information USA: 1-800-446-0744 Global: 1-858-547-4526 hitachivantara.com/contact ... © Hitachi Vantara LLC 2024. All Rights Reserved. ... HV-BT-BR-EverFlex-IaaS-Portfolio-30Aug24-A",
+    "description": "The call to action, public contact numbers, copyright and trademark notices, and brochure document code indicate a published marketing piece. The only contact details are corporate and general-purpose, not personal data.",
+    "verified": false
+   }
+  ]
+ },
+ {
+  "file": "HitachiDS_Datathon_Challenges_Package/TC2_Filled_In_Employement_Application.pdf",
+  "document": {
+   "filename": "TC2_Filled_In_Employement_Application.pdf",
+   "status": "completed",
+   "requires_review": false,
+   "page_count": 4,
+   "image_count": 4,
+   "is_legible": true,
+   "sensitivity": "Highly Sensitive",
+   "unsafe": false,
+   "confidence": 0.93
+  },
+  "classification": {
+   "summary": "A completed employment application for a Customer Service Representative position at Sample Company, filled in for an identified applicant (Susan J. Simmons). It contains her name, home and mailing addresses, email, phone numbers, a full employment and education history, references, and background questions (felony and drug-related conviction questions, family relationships at the company, and a signed certification).",
+   "reasoning": "The decision rule states that a completed application or personnel file that combines identity and contact details with employment or background history is Highly Sensitive. This document is a completed employment application, and it contains both categories of information for one private individual. Identity and contact details include her full name, street address, P.O. Box, email address, and multiple telephone numbers. Employment and background history include a multi-year work history with employers, wages, reasons for leaving, a education record, a driver's license entry, references, a family relationship at the company, and felony and drug-crime conviction questions. Because a Highly Sensitive indicator is present, the sensitivity level is Highly Sensitive. The Public category does not apply: the form is a non-public personal record, not marketing or public-release content. The copyright and publisher notice does not make the completed personal data public. The Confidential label is also insufficient because the personal-record criterion is explicitly met.\n\nUnsafe flag: The document contains no hate speech, exploitative, violent, criminal-activity promotion, political news, or cyber-threat content, and the content safety results record it as safe. Item 21 and item 30 mention that the applicant cared for a sick child who is now well. This is a personal, non-safeguarding reference. It does not identify a minor by name or describe abuse, neglect, or a child-protection matter, so it does not trigger the child-safety concern or the Highly Sensitive child-record clause. The felony and drug-conviction questions are standard screening questions, and no conviction is disclosed. The unsafe flag is therefore false.",
+   "model": "claude-haiku-5-5",
+   "pii_detected": "1",
+   "content_safe": "1"
+  },
+  "citations": [
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "3. Name (Last, First, Middle) Simmons, Susan J.  4. Street address (No P.O. Box Numbers) 127 Blackrock Drive 5. Apartment number #105  6. City Anytown 7. State Virginia 8. Zip 99999",
+    "description": "Provides the applicant's full name and residential address, which are identity and contact details for a private individual.",
+    "verified": true
+   },
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "9. If mailing address is different, provide address P.O. Box 199, Anytown, VA 99999 10. E-mail address Susan123@aol.com 11. Telephone number (999) 555-0010 12. Cell phone number (999) 555-9919",
+    "description": "Adds a mailing address, personal email address, and home and cell phone numbers, extending the contact details that identify the individual.",
+    "verified": false
+   },
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "1. Kind of position or job for which you are applying: Customer Service Representative. 2. Other positions: Loan Officer or New Account Representative",
+    "description": "Shows the application is a completed job application for a specific individual, which is the document type the Highly Sensitive rule names.",
+    "verified": false
+   },
+   {
+    "page_number": 2,
+    "evidence_type": "text",
+    "evidence_text": "20. Experience... Name of employer Henry Construction ... Immediate supervisor John Henry ... Your job title Secretary/ Bookkeeper ... Salary range: Beginning wage $14.50 per hour, Ending wage $18.50 per hour ... Reason for leaving: Employer retiring",
+    "description": "Provides a detailed employment history with employers, supervisors, titles, dates, and wages. This is employment history combined with identity details.",
+    "verified": false
+   },
+   {
+    "page_number": 2,
+    "evidence_type": "text",
+    "evidence_text": "Name of employer Home Town National Bank ... Your job title Teller ... Name of employer Yourtown Department Store ... Sales Clerk ... Reason for leaving: To care for newborn child.",
+    "description": "Additional personal employment records for prior jobs, including personal reasons for leaving, which add to the individual's background history.",
+    "verified": true
+   },
+   {
+    "page_number": 3,
+    "evidence_type": "text",
+    "evidence_text": "26. Education: ... Anytown High School ... Diploma ... State Community College ... A.A. ... Business. 24. Licenses: Virginia Driver's License - Expires April, 2012.",
+    "description": "Adds education history and a government-issued license reference, which contribute to the personal background record.",
+    "verified": false
+   },
+   {
+    "page_number": 3,
+    "evidence_type": "text",
+    "evidence_text": "28. References: Mary Samuel ... P.O. Box 19 ... (999) 555-2626; Rev. Martin Bolles ... 2620 Main Street ... (999) 555-2727; Frank Gibbs ... 970 Smyth ... (999) 555-6999",
+    "description": "Lists third-party personal references with addresses and phone numbers, which are further identifying contact details about private individuals.",
+    "verified": false
+   },
+   {
+    "page_number": 4,
+    "evidence_type": "text",
+    "evidence_text": "29. b. Have you ever been convicted of a felony? * c. Have you ever been convicted of a drug-related crime? * Conviction will not necessarily disqualify the applicant from employment.",
+    "description": "Background-check questions about criminal history. Their presence in a completed form ties personal criminal-history screening to a named individual, which is sensitive background information.",
+    "verified": false
+   },
+   {
+    "page_number": 4,
+    "evidence_type": "text",
+    "evidence_text": "e. Do you have any blood relatives employed by this company? If yes, name of relative: Betty Wilson ... Relation to you: Sister-in-law (see #30). 30. ... Betty Wilson works in the South Fork Branch office and would not be my supervisor.",
+    "description": "Discloses a named family member's employment and workplace location, which is further personal information about the applicant and a third party.",
+    "verified": false
+   },
+   {
+    "page_number": 3,
+    "evidence_type": "text",
+    "evidence_text": "21. Explain all gaps in your employment... Reason: Full-time school ... 30. Took care of sick child. Child is well now and does not require my attention.",
+    "description": "Mentions a sick child in a personal context. This is not a child-protection or safeguarding matter, and no minor is named or identified, so it does not trigger the child-record criterion or the unsafe flag.",
+    "verified": false
+   },
+   {
+    "page_number": 4,
+    "evidence_type": "text",
+    "evidence_text": "31. Candidate statement: ... I certify that all of the statements made by me are true, complete and correct to the best of my knowledge and belief. Applicant Signature ____ Date ____",
+    "description": "The signature block and certification show this is a completed and attested personnel-type record for an individual, not a blank template or public document.",
+    "verified": false
+   },
+   {
+    "page_number": 1,
+    "evidence_type": "pii",
+    "evidence_text": "9, Anytown, VA 99999 10.   E-mail address         Su************om\n11.  Telephone number (999) 555-0010 12.   Cell p",
+    "description": "PII detected: email",
+    "verified": null
+   }
+  ]
+ },
+ {
+  "file": "HitachiDS_Datathon_Challenges_Package/TC3_Sample_Internal_Memo.pdf",
+  "document": {
+   "filename": "TC3_Sample_Internal_Memo.pdf",
+   "status": "completed",
+   "requires_review": false,
+   "page_count": 3,
+   "image_count": 3,
+   "is_legible": true,
+   "sensitivity": "Confidential",
+   "unsafe": false,
+   "confidence": 0.82
+  },
+  "classification": {
+   "summary": "A two-page guidance document from a construction management (CM) academic program. It gives students instructions for the research proposal stage (deadlines, required sections, page length) and includes a sample proposal, 'A Conceptual Framework for Scheduling Constraint Management,' with reviewer comments and a reference list. It contains no personal data.",
+   "reasoning": "No Highly Sensitive indicators are present. The document contains no SSNs, account or credit card numbers, proprietary schematics, defense designs, classified material, or personal records about identifiable individuals, and it does not identify any minor. The sensitivity decision therefore turns on the Public versus Confidential question. The document is not marketing material, a brochure, a press release, or public website content. Its comment annotations and instructions ('Students are not allowed to enroll...', 'your advisor', 'CM faculty members') show it was written as internal guidance for enrolled students of a specific program, not for release to the general public. Under the decision rule, a document that does not clearly show it was produced for public release is assigned Confidential, and the absence of PII does not make it Public. The lack of personal data is noted, but it does not override that rule. The content is academic and technical, with no hate speech, exploitative, violent, criminal, political news, cyber-threat, or child-safety concerns, so the unsafe flag is false. The confidence is moderately high rather than near-certain because the document is an academic template that could in principle be posted publicly, though nothing in it shows that intent.",
+   "model": "claude-haiku-5-5",
+   "pii_detected": "0",
+   "content_safe": "1"
+  },
+  "citations": [
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "Prior to starting a research, i.e. enrolling in the first semester research course, students must go through the proposal stage, during which students will develop their proposal and have it reviewed by his/her research advisor.",
+    "description": "Addresses students in a specific academic program following internal procedures. This is internal operational guidance rather than material produced for general public release, so it supports Confidential.",
+    "verified": true
+   },
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "For students planning to start their research in the fall semester, the deadline for the proposal submission (to your advisor) is July 15. For those who plan to start in the spring semester, the proposal deadline is December 1.",
+    "description": "Contains internal program deadlines and procedures intended for enrolled students, which is non-public operational content and supports Confidential.",
+    "verified": false
+   },
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "During the proposal stage, students should discuss their research interests with CM faculty members, identify a research topic, conduct preliminary literature review and develop a project proposal.",
+    "description": "Refers to 'CM faculty members' and gives directions to students within a particular department, indicating an internal academic audience rather than the general public.",
+    "verified": false
+   },
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "Sample proposal text | Comment ... Background or introduction section provides a description of the basic facts ... Problem statement provides a clear and concise description ...",
+    "description": "The document mixes instructional comments with a sample proposal, showing it is an internal template or teaching aid, not promotional content. It contains no marketing language, so it does not qualify as Public.",
+    "verified": false
+   },
+   {
+    "page_number": 3,
+    "evidence_type": "text",
+    "evidence_text": "This study will be conducted between September 2010 and May 2011.",
+    "description": "A dated, sample-specific research schedule. It is non-public academic planning content with no personal data, so it does not raise the level to Highly Sensitive but is consistent with an internal academic document.",
+    "verified": true
+   },
+   {
+    "page_number": 3,
+    "evidence_type": "text",
+    "evidence_text": "References: Ballard, G. (2000). 'Last planner system of production control.' Ph.D. Dissertation. Univ. of Birmingham ... Hinze, J. W. (2008). Construction planning and scheduling, 3rd ed. Pearson, NJ.",
+    "description": "The reference list cites published academic works. These are public citations, but the document as a whole is an internal academic instruction template. The presence of cited public literature does not make the document itself public, and no Highly Sensitive indicators appear.",
+    "verified": false
+   }
+  ]
+ },
+ {
+  "file": "HitachiDS_Datathon_Challenges_Package/TC4_ Stealth_Fighter_With_Part_Names.pdf",
+  "document": {
+   "filename": "TC4_ Stealth_Fighter_With_Part_Names.pdf",
+   "status": "completed",
+   "requires_review": false,
+   "page_count": 18,
+   "image_count": 18,
+   "is_legible": true,
+   "sensitivity": "Confidential",
+   "unsafe": false,
+   "confidence": 0.72
+  },
+  "classification": {
+   "summary": "This is a template for a Light Business Airplane (LBA) Flight Operations Manual, published by the National Business Aviation Association (NBAA). It covers organization and accountabilities, safety management, standard operating procedures, crew qualifications, maintenance, security procedures, and appendices including a risk assessment tool, airworthiness checklist, weight and balance placeholder, emergency response plan, and trip debrief form. It is written to be customized and copied into company-specific manuals. It contains no PII, financial data, or classified or defense material.",
+   "reasoning": "No Highly Sensitive indicator is present. The document contains no SSNs, account or credit card numbers, proprietary schematics, defense designs, completed personnel or application records, or identifying information about a minor in a safeguarding matter. The child weight entries in Section 3.1.6 are generic planning values. The registration numbers N1234 and N5678 are placeholder-style and do not identify a person.\n\nThe Public label is considered but not assigned. The document was published by NBAA and points readers to a public website, which suggests a broad release. However, it is not marketing material, a product brochure, public website content, or a generic image. It is an operational guidance template meant to be adapted into an operator's internal, non-public flight operations manual, with blanks for company name and details. The decision rule states that the absence of PII is not evidence of Public status and that uncertain cases are assigned Confidential. Confidential is therefore the appropriate label.\n\nContent safety: the document contains no hate speech, exploitative, violent, criminal, political news, or cyber-threat content. Its security section concerns aviation security procedures, which is standard operational content. The unsafe flag is false.",
+   "model": "claude-haiku-5-5",
+   "pii_detected": "0",
+   "content_safe": "1"
+  },
+  "citations": [
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "This Word format is provided to facilitate the creation of your own customized and company-specific manual. NBAA encourages companies to copy and paste text from this Word file directly into their own documents as needed.",
+    "description": "States the document's purpose as an editable template for creating non-public, company-specific operational manuals. This is internal operational content, not material produced for general public promotion, so it supports Confidential rather than Public.",
+    "verified": false
+   },
+   {
+    "page_number": 1,
+    "evidence_type": "text",
+    "evidence_text": "Access the PDF version at www.nbaa.org/admin/policies/lba-flight-ops-manual.",
+    "description": "Shows the template is available online. This is the main point in favor of a Public reading, but availability alone does not show the document was produced as marketing or public-facing content, so it does not meet the Public standard.",
+    "verified": false
+   },
+   {
+    "page_number": 4,
+    "evidence_type": "text",
+    "evidence_text": "1.1.1 Distribution: A copy of this manual will be supplied to the following: Each pilot who will fly aircraft operated by the Company. Aircraft owner. President of Company or CEO. Aircraft with the following registration numbers: N1234, N5678.",
+    "description": "Describes distribution to company personnel and owners, indicating an internal, non-public operational document. The registration numbers are placeholder-style and not sensitive personal data.",
+    "verified": false
+   },
+   {
+    "page_number": 13,
+    "evidence_type": "text",
+    "evidence_text": "6.0 General: The NBAA Security Protocol was developed to serve as the NBAA recognized and Transportation Security Administration (TSA) endorsed standard for demonstrating an acceptable security protocol for Business Aviation.",
+    "description": "Shows the security section is procedural guidance for operators. It is non-public operational content and contains no classified or defense detail, so it supports Confidential without raising the sensitivity to Highly Sensitive.",
+    "verified": false
+   },
+   {
+    "page_number": 4,
+    "evidence_type": "text",
+    "evidence_text": "Company/Organization Name encourages feedback and suggestions on improving policies and procedures outlined in this manual to enhance the overall safety of flight operations.",
+    "description": "Placeholder language for a specific company's internal manual. It confirms the document is intended for adoption by an individual operator, which fits internal business documentation.",
+    "verified": true
+   },
+   {
+    "page_number": 6,
+    "evidence_type": "text",
+    "evidence_text": "Child <12yrs 75 lbs – 34kg; Infant <2yrs 30 lbs – 14 kg",
+    "description": "Generic passenger weight planning values. They do not identify any minor and do not relate to a child-protection or safeguarding matter, so they do not trigger the Highly Sensitive minor-identification indicator.",
+    "verified": false
+   }
+  ]
+ }
+]

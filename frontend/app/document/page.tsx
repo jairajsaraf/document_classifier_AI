@@ -33,7 +33,7 @@ export default function DocumentView() {
   useEffect(() => {
     // static export: the id is read in the browser, not from a dynamic route
     const docId = new URLSearchParams(window.location.search).get('id')
-    if (!docId || !/^\d+$/.test(docId)) return setError('No document id in the address')
+    if (!docId || !/^[0-9a-f]{32}$/.test(docId)) return setError('No document id in the address')
     setId(docId)
     load(docId)
   }, [])
@@ -194,6 +194,7 @@ export default function DocumentView() {
 
                   <section aria-labelledby="review-title" className="border-t pt-6">
                     <h2 id="review-title" className="text-sm font-medium">Your review</h2>
+                    <p className="mt-1 text-xs text-text-2">Saved only until this demo goes to sleep; it is not kept long term.</p>
                     <div className="mt-3 flex gap-2">
                       <Button onClick={approve}>Approve label</Button>
                       <Button variant="outline" aria-expanded={overriding} aria-controls="override-form" onClick={() => setOverriding(!overriding)}>

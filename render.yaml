@@ -1,0 +1,37 @@
+# Render Blueprint (https://render.com/docs/blueprint-spec). Dashboard: New > Blueprint > pick this repo.
+# Free plan: sleeps after 15 idle minutes, ephemeral disk (https://render.com/docs/free).
+services:
+  - type: web
+    name: document-classifier
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeployTrigger: "off"   # deploys only when you press Manual Deploy
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false            # typed into the dashboard on first creation, never stored in git
+      - key: ENVIRONMENT
+        value: "production"
+      - key: DEBUG
+        value: "false"
+      - key: PRIMARY_LLM_MODEL
+        value: "claude-haiku-5-5"
+      - key: USE_DUAL_VERIFICATION
+        value: "false"
+      - key: ALLOWED_EXTENSIONS
+        value: '["pdf"]'
+      # open-upload guard rails (backend/guard.py), shown at their defaults
+      - key: UPLOADS_PER_IP_PER_HOUR
+        value: "5"
+      - key: UPLOADS_PER_DAY
+        value: "100"
+      - key: MAX_FILE_SIZE_MB
+        value: "10"
+      - key: MAX_STORED_MB
+        value: "200"
+      - key: MAX_PDF_PAGES
+        value: "25"
+      - key: CLIENT_IP_HEADER
+        value: "cf-connecting-ip"  # Render sits behind Cloudflare; the last X-Forwarded-For entry rotates (docs/VERIFY.md)

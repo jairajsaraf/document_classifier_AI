@@ -480,6 +480,8 @@ def test_filename_is_cleaned(client):
     assert clean_filename("../../etc/pass wd.pdf") == "pass wd.pdf"
     assert clean_filename("a<b>&c.pdf") == "a_b__c.pdf"
     assert clean_filename("") == "document" and len(clean_filename("x" * 500)) == 100
+    long_pdf = clean_filename("x" * 500 + ".pdf")  # truncation must not eat the extension (the UI needs it)
+    assert long_pdf.endswith(".pdf") and len(long_pdf) == 100
     shown = client.get("/api/documents").json()["documents"]
     assert all("<" not in d["filename"] for d in shown)
 
@@ -554,3 +556,17 @@ def test_pdf_pages_are_rendered_one_at_a_time(monkeypatch):
     monkeypatch.setattr(document_processor, "convert_from_path", fake)
     out = DocumentProcessor().process_document(str(TC3))
     assert calls == [(i, i) for i in range(1, out["page_count"] + 1)] and out["image_count"] == out["page_count"]
+
+
+def test_database_from_before_phase_5_gets_public_ids(tmp_path):
+    from sqlalchemy import create_engine, text
+    from backend.database.db import _add_public_id
+    eng = create_engine(f"sqlite:///{(tmp_path / 'old.db').as_posix()}")
+    with eng.begin() as c:
+        c.execute(text("CREATE TABLE documents (id INTEGER PRIMARY KEY, filename VARCHAR(255))"))
+        c.execute(text("INSERT INTO documents (filename) VALUES ('a.pdf'), ('b.pdf')"))
+    _add_public_id(eng)
+    _add_public_id(eng)  # second start: nothing to do
+    with eng.begin() as c:
+        ids = [r[0] for r in c.execute(text("SELECT public_id FROM documents"))]
+    assert len(ids) == 2 and len(set(ids)) == 2 and all(len(i) == 32 for i in ids)

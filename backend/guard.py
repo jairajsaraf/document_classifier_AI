@@ -4,6 +4,7 @@ State is in memory (one process on a free instance). A restart resets it, so the
 cap on the API key in the Anthropic Console is the real backstop.
 """
 import io
+import os
 import re
 import time
 from collections import defaultdict, deque
@@ -65,4 +66,5 @@ def clean_filename(name) -> str:
     """Display name only (the saved file gets a generated name): no path parts, no control characters."""
     base = re.split(r"[\/]", name or "")[-1]
     base = re.sub(r"[^\w .()\[\]-]", "_", base).strip(" .")
-    return base[:100] or "document"
+    stem, ext = os.path.splitext(base)  # keep the validated extension: the UI picks the PDF viewer by it
+    return (stem[:100 - len(ext)] + ext) or "document"

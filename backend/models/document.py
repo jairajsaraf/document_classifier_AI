@@ -1,6 +1,7 @@
 """
 Document models for storing uploaded documents and metadata
 """
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -32,6 +33,8 @@ class Document(Base):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True, index=True)
+    # unguessable id used in every URL; the integer id stays internal (foreign keys, ordering)
+    public_id = Column(String(32), unique=True, index=True, nullable=False, default=lambda: uuid.uuid4().hex)
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)

@@ -10,3 +10,5 @@ temp
 logs
 *.db
 eval/runs
+**/node_modules
+e2e

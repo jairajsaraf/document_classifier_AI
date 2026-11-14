@@ -297,9 +297,11 @@ def test_classifier_fails_on_refusal_or_truncation(stop):
 @pytest.fixture
 def client(monkeypatch):
     from fastapi.testclient import TestClient
-    from backend import main
+    from backend import guard, main
     from backend.database import init_db
     init_db()
+    guard.reset()
+    monkeypatch.setattr(settings, "UPLOADS_PER_IP_PER_HOUR", 1000)  # the guard tests set their own limits
     calls = []
 
     def classify(self, path, use_dual_verification=None):
@@ -332,7 +334,7 @@ def test_upload_keeps_client_filename_out_of_save_path(client, name):
     r = upload(client, name)
     assert r.status_code == 200, r.text
     db = SessionLocal()
-    doc = db.get(Document, r.json()["document_id"])
+    doc = db.query(Document).filter_by(public_id=r.json()["document_id"]).one()
     saved, original = Path(doc.file_path).resolve(), doc.original_filename
     db.close()
     assert saved.parent == up and saved.is_file() and saved.suffix == ".pdf"
@@ -371,6 +373,7 @@ def test_ui_endpoints_serve_file_verified_flag_and_model(client):
     cites = client.get(f"/api/documents/{doc_id}").json()["citations"]
     assert [c["verified"] for c in cites if c["evidence_type"] == "text"] == [False]  # "x" is not in "Internal memo."
     assert client.get("/api/documents/999999/file").status_code == 404
+    assert client.get("/api/documents/1/file").status_code == 404  # internal integer ids are not addressable
     # the served type comes from the extension, not the uploader's claimed type
     evil = client.post("/api/documents/upload", files={"file": ("x.pdf", b"<script>1</script>", "text/html")})
     served = client.get(f"/api/documents/{evil.json()['document_id']}/file")
@@ -386,7 +389,7 @@ def test_document_list_pages_without_overlap(client):
     total = client.get("/api/documents").json()["total"]
     ids = [d["id"] for skip in range(0, total, 2)
            for d in client.get("/api/documents", params={"skip": skip, "limit": 2}).json()["documents"]]
-    assert len(ids) == total == len(set(ids)) and ids == sorted(ids)
+    assert len(ids) == total == len(set(ids))
 
 
 def test_classify_with_default_settings_and_no_openai_key(client):
@@ -408,3 +411,146 @@ def test_feedback_overrides_both_fields(client):
     # the detail view serves the reviewed values too (PR #3 review), not the model's original
     got = client.get(f"/api/documents/{doc_id}").json()["classification"]
     assert (got["sensitivity"], got["unsafe"]) == ("Public", False)
+
+
+# ---------------------------------------------------------------- Phase 5: deploy guard rails
+def test_document_ids_are_unguessable(client):
+    doc_id = upload(client, "memo.pdf").json()["document_id"]
+    assert len(doc_id) == 32 and int(doc_id, 16) >= 0
+    assert client.get(f"/api/documents/{doc_id}").json()["document"]["id"] == doc_id
+
+
+def test_per_ip_upload_limit(client, monkeypatch):
+    monkeypatch.setattr(settings, "UPLOADS_PER_IP_PER_HOUR", 2)
+    assert [upload(client, f"a{i}.pdf").status_code for i in range(3)] == [200, 200, 429]
+
+
+def test_global_daily_cap(client, monkeypatch):
+    monkeypatch.setattr(settings, "UPLOADS_PER_DAY", 2)
+    assert [upload(client, f"a{i}.pdf").status_code for i in range(3)] == [200, 200, 429]
+
+
+def test_client_ip_header_separates_visitors(client, monkeypatch):
+    monkeypatch.setattr(settings, "UPLOADS_PER_IP_PER_HOUR", 1)
+    monkeypatch.setattr(settings, "CLIENT_IP_HEADER", "true-client-ip")
+    def up(ip):
+        return client.post("/api/documents/upload", files={"file": ("a.pdf", b"%PDF-1.4", "application/pdf")},
+                           headers={"true-client-ip": ip, "x-forwarded-for": ip}).status_code
+    assert [up("1.1.1.1"), up("2.2.2.2"), up("1.1.1.1")] == [200, 200, 429]
+    # a client-supplied leading X-Forwarded-For entry cannot buy a fresh allowance: the last entry counts
+    monkeypatch.setattr(settings, "CLIENT_IP_HEADER", "x-forwarded-for")
+    assert [up("6.6.6.%d, 3.3.3.3" % i) for i in range(2)] == [200, 429]
+
+
+def test_size_cap(client, monkeypatch):
+    monkeypatch.setattr(settings, "MAX_FILE_SIZE_MB", 1)
+    assert upload(client, "big.pdf", b"x" * (1024 * 1024 + 1)).status_code == 413
+    assert upload(client, "ok.pdf", b"x" * 1024).status_code == 200
+
+
+def test_storage_cap(client, monkeypatch):
+    from backend.database import SessionLocal
+    from backend.models import Document
+    db = SessionLocal()
+    used = sum(d.file_size for d in db.query(Document).all())
+    db.close()
+    mb = 1024 * 1024
+    cap = -(-used // mb) + 1  # whole MB above what is stored
+    monkeypatch.setattr(settings, "MAX_STORED_MB", cap)
+    assert upload(client, "a.pdf", b"x" * (cap * mb - used - 1000)).status_code == 200  # fills the store to 1000 B short
+    assert upload(client, "b.pdf", b"x" * 2000).status_code == 507
+
+
+def test_page_cap(client, monkeypatch):
+    import io
+    from pypdf import PdfWriter
+    def pdf(n):
+        w, buf = PdfWriter(), io.BytesIO()
+        for _ in range(n):
+            w.add_blank_page(100, 100)
+        w.write(buf)
+        return buf.getvalue()
+    monkeypatch.setattr(settings, "MAX_PDF_PAGES", 3)
+    assert upload(client, "long.pdf", pdf(4)).status_code == 400
+    assert upload(client, "short.pdf", pdf(3)).status_code == 200
+
+
+def test_filename_is_cleaned(client):
+    from backend.guard import clean_filename
+    assert clean_filename("../../etc/pass wd.pdf") == "pass wd.pdf"
+    assert clean_filename("a<b>&c.pdf") == "a_b__c.pdf"
+    assert clean_filename("") == "document" and len(clean_filename("x" * 500)) == 100
+    shown = client.get("/api/documents").json()["documents"]
+    assert all("<" not in d["filename"] for d in shown)
+
+
+def test_each_upload_is_classified_once(client):
+    doc_id = upload(client, "memo.pdf").json()["document_id"]
+    assert client.post(f"/api/documents/{doc_id}/classify").status_code == 200
+    assert client.post(f"/api/documents/{doc_id}/classify").status_code == 409
+    assert len(client.classify_calls) == 1
+
+
+def test_approve_marks_document_reviewed(client):
+    doc_id = upload(client, "memo.pdf").json()["document_id"]
+    client.post(f"/api/documents/{doc_id}/classify")
+    row = lambda: next(d for d in client.get("/api/documents").json()["documents"] if d["id"] == doc_id)
+    assert (row()["status"], row()["requires_review"], row()["reviewed"]) == ("pending_review", True, False)
+    r = client.post("/api/feedback", params={"document_id": doc_id, "feedback_type": "confirmation", "reviewer_name": "t"})
+    assert r.status_code == 200, r.text
+    assert (row()["status"], row()["requires_review"], row()["reviewed"]) == ("completed", False, True)
+    assert row()["sensitivity"] == "Confidential"  # approving changes nothing else
+
+
+def test_responses_are_gzipped(client):
+    r = client.get("/openapi.json", headers={"accept-encoding": "gzip"})
+    assert r.headers["content-encoding"] == "gzip"
+
+
+def test_seed_loads_fixture_into_empty_database_only(monkeypatch, tmp_path):
+    from backend import seed
+    from backend.database import SessionLocal, init_db
+    from backend.models import Document
+    init_db()
+    fixture = tmp_path / "seed.json"
+    fixture.write_text(json.dumps([{
+        "file": TC3.relative_to(ROOT).as_posix(),
+        "document": {"filename": "TC3.pdf", "status": "pending_review", "requires_review": True, "page_count": 3,
+                     "image_count": 0, "is_legible": True, "sensitivity": "Confidential", "unsafe": False, "confidence": 0.8},
+        "classification": {"summary": "s", "reasoning": "r", "model": "m", "pii_detected": False, "content_safe": True},
+        "citations": [{"page_number": 1, "evidence_type": "text", "evidence_text": "q", "description": "d", "verified": True}],
+    }]), encoding="utf-8")
+    monkeypatch.setattr(seed, "FIXTURE", fixture)
+    db = SessionLocal()
+    db.query(Document).delete()
+    db.commit()
+    assert seed.seed_if_empty(db) == 1
+    assert seed.seed_if_empty(db) == 0  # already populated: a restart never duplicates or overwrites
+    doc = db.query(Document).one()
+    assert doc.original_filename == "TC3.pdf" and doc.primary_category.value == "Confidential"
+    assert os.path.isfile(doc.file_path) and len(doc.public_id) == 32
+    db.close()
+
+
+def test_shipped_seed_fixture_is_consistent():
+    fixture = ROOT / "backend" / "seed_data.json"
+    if not fixture.exists():
+        pytest.skip("no fixture exported yet")
+    for item in json.loads(fixture.read_text(encoding="utf-8")):
+        assert (ROOT / item["file"]).is_file()
+        assert item["document"]["sensitivity"] in ("Public", "Confidential", "Highly Sensitive")
+        assert item["classification"]["reasoning"] and item["citations"]
+
+
+def test_pdf_pages_are_rendered_one_at_a_time(monkeypatch):
+    # all pages at once (the old behaviour) got the process OOM-killed on a 512 MB instance
+    from PIL import Image
+    from backend.services import document_processor
+    calls = []
+
+    def fake(path, dpi, first_page, last_page):
+        calls.append((first_page, last_page))
+        return [Image.new("RGB", (10, 10))]
+    monkeypatch.setattr(document_processor, "convert_from_path", fake)
+    out = DocumentProcessor().process_document(str(TC3))
+    assert calls == [(i, i) for i in range(1, out["page_count"] + 1)] and out["image_count"] == out["page_count"]

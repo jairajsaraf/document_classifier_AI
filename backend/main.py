@@ -2,10 +2,13 @@
 Main FastAPI Application
 Regulatory Document Classifier API
 """
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uvicorn
@@ -18,6 +21,8 @@ from pathlib import Path
 
 from backend.config import settings
 from backend.database import init_db, get_db
+from backend import guard
+from backend.seed import seed_if_empty
 from backend.services.classifier import DocumentClassifier
 from backend.models import (
     Document,
@@ -46,6 +51,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# gzip: the PDF.js worker is 1.27 MB raw, about 375 KB compressed (docs/UI_BUILD.md)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # Initialize database
 @app.on_event("startup")
 async def startup_event():
@@ -53,6 +61,17 @@ async def startup_event():
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     init_db()
     logger.info("Database initialized")
+    if settings.SEED_ON_BOOT:
+        from backend.database import SessionLocal
+        with SessionLocal() as db:
+            logger.info(f"Seeded {seed_if_empty(db)} documents")
+
+def find_document(db: Session, public_id: str) -> Document:
+    doc = db.query(Document).filter(Document.public_id == public_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
 
 # API Status endpoint
 @app.get("/api")
@@ -76,6 +95,7 @@ async def health_check():
 # Document Upload and Classification
 @app.post("/api/documents/upload")
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -83,15 +103,15 @@ async def upload_document(
     Upload a document. Classify it with POST /api/documents/{id}/classify.
     """
     try:
-        # Validate file size
-        file_size = 0
-        content = await file.read()
-        file_size = len(content)
+        guard.check_upload_quota(request)
 
+        # Validate file size (read one byte past the cap so an oversized upload is never held whole)
         max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+        content = await file.read(max_size + 1)
+        file_size = len(content)
         if file_size > max_size:
             raise HTTPException(
-                status_code=400,
+                status_code=413,
                 detail=f"File size exceeds maximum allowed size of {settings.MAX_FILE_SIZE_MB}MB"
             )
 
@@ -102,6 +122,15 @@ async def upload_document(
                 status_code=400,
                 detail=f"File type '{file_ext}' not allowed. Allowed types: {settings.ALLOWED_EXTENSIONS}"
             )
+
+        stored = db.query(func.coalesce(func.sum(Document.file_size), 0)).scalar()
+        if stored + file_size > settings.MAX_STORED_MB * 1024 * 1024:
+            raise HTTPException(status_code=507, detail="The demo's upload storage is full; it is cleared when the instance sleeps.")
+
+        if file_ext == "pdf":
+            pages = guard.pdf_page_count(content)
+            if pages is not None and pages > settings.MAX_PDF_PAGES:
+                raise HTTPException(status_code=400, detail=f"PDF has {pages} pages; this demo accepts at most {settings.MAX_PDF_PAGES}.")
 
         # Generated name: the client filename is stored as data only, never used in the path
         safe_filename = f"{uuid.uuid4().hex}.{file_ext}"
@@ -114,7 +143,7 @@ async def upload_document(
         # Create document record
         doc = Document(
             filename=safe_filename,
-            original_filename=file.filename,
+            original_filename=guard.clean_filename(file.filename),
             file_path=file_path,
             file_size=file_size,
             mime_type=file.content_type or "application/octet-stream",
@@ -129,19 +158,19 @@ async def upload_document(
             action="document_upload",
             entity_type="document",
             entity_id=doc.id,
-            description=f"Document uploaded: {file.filename}",
+            description=f"Document uploaded: {doc.original_filename}",
             success=True
         )
         db.add(audit)
         db.commit()
 
-        logger.info(f"Document uploaded: {file.filename} (ID: {doc.id})")
+        logger.info(f"Document uploaded: {doc.original_filename} (ID: {doc.id})")
 
         return {
-            "document_id": doc.id,
-            "filename": file.filename,
+            "document_id": doc.public_id,
+            "filename": doc.original_filename,
             "status": doc.status.value,
-            "message": f"Document uploaded. Classify with POST /api/documents/{doc.id}/classify."
+            "message": f"Document uploaded. Classify with POST /api/documents/{doc.public_id}/classify."
         }
 
     except HTTPException:
@@ -152,19 +181,19 @@ async def upload_document(
 
 @app.post("/api/documents/{document_id}/classify")
 async def classify_document_endpoint(
-    document_id: int,
+    document_id: str,
     db: Session = Depends(get_db)
 ):
     """
     Trigger classification for an uploaded document
 
-    This is for manual/interactive classification mode.
+    This is for manual/interactive classification mode. Each upload is classified once:
+    the upload quota is what bounds spend, so a second call is refused.
     """
     try:
-        # Get document
-        doc = db.query(Document).filter(Document.id == document_id).first()
-        if not doc:
-            raise HTTPException(status_code=404, detail="Document not found")
+        doc = find_document(db, document_id)
+        if doc.status != DocumentStatus.UPLOADED:
+            raise HTTPException(status_code=409, detail="This document has already been classified.")
 
         # Update status
         doc.status = DocumentStatus.CLASSIFYING
@@ -173,7 +202,8 @@ async def classify_document_endpoint(
 
         # Run classification
         classifier = DocumentClassifier()
-        result = classifier.classify_document(doc.file_path)
+        # in a worker thread: it takes seconds, and the event loop must keep answering health checks
+        result = await run_in_threadpool(classifier.classify_document, doc.file_path)
 
         # Update document with results
         if result["status"] == "completed":
@@ -249,7 +279,7 @@ async def classify_document_endpoint(
             raise RuntimeError(result.get("error", "Unknown error"))  # categorised by the handler below
 
         return {
-            "document_id": doc.id,
+            "document_id": doc.public_id,
             "status": doc.status.value,
             "sensitivity": result["sensitivity"],
             "unsafe": result["unsafe"],
@@ -313,15 +343,13 @@ async def classify_document_endpoint(
         )
 
 @app.get("/api/documents/{document_id}")
-async def get_document(document_id: int, db: Session = Depends(get_db)):
+async def get_document(document_id: str, db: Session = Depends(get_db)):
     """Get document details and classification results"""
-    doc = db.query(Document).filter(Document.id == document_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc = find_document(db, document_id)
 
     # Get classification
     classification = db.query(Classification).filter(
-        Classification.document_id == document_id
+        Classification.document_id == doc.id
     ).first()
 
     # Get citations
@@ -333,7 +361,7 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
 
     return {
         "document": {
-            "id": doc.id,
+            "id": doc.public_id,
             "filename": doc.original_filename,
             "status": doc.status.value,
             "page_count": doc.page_count,
@@ -364,9 +392,9 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
     }
 
 @app.get("/api/documents/{document_id}/file")
-async def get_document_file(document_id: int, db: Session = Depends(get_db)):
+async def get_document_file(document_id: str, db: Session = Depends(get_db)):
     """The stored upload, shown inline in the document view"""
-    doc = db.query(Document).filter(Document.id == document_id).first()
+    doc = db.query(Document).filter(Document.public_id == document_id).first()
     if not doc or not os.path.isfile(doc.file_path):
         raise HTTPException(status_code=404, detail="File not found")
     # type from the validated extension, never the client's claimed content type (no HTML on this origin)
@@ -391,9 +419,10 @@ async def list_documents(
     return {
         "documents": [
             {
-                "id": doc.id,
+                "id": doc.public_id,
                 "filename": doc.original_filename,
                 "status": doc.status.value,
+                "reviewed": doc.reviewed_at is not None,
                 "sensitivity": doc.primary_category.value if doc.primary_category else None,
                 "unsafe": doc.unsafe,
                 "confidence": doc.confidence_score,
@@ -408,7 +437,7 @@ async def list_documents(
 # Feedback endpoints
 @app.post("/api/feedback")
 async def submit_feedback(
-    document_id: int,
+    document_id: str,
     feedback_type: str,
     reviewer_name: str,
     corrected_category: Optional[str] = None,
@@ -419,18 +448,16 @@ async def submit_feedback(
     """Submit HITL feedback"""
     try:
         # Validate document exists
-        doc = db.query(Document).filter(Document.id == document_id).first()
-        if not doc:
-            raise HTTPException(status_code=404, detail="Document not found")
+        doc = find_document(db, document_id)
 
         # Get classification
         classification = db.query(Classification).filter(
-            Classification.document_id == document_id
+            Classification.document_id == doc.id
         ).first()
 
         # Create feedback
         feedback = Feedback(
-            document_id=document_id,
+            document_id=doc.id,
             classification_id=classification.id if classification else None,
             feedback_type=FeedbackType[feedback_type.upper()],
             original_category=classification.category if classification else None,
@@ -445,12 +472,15 @@ async def submit_feedback(
         # Update document if corrected
         if corrected_unsafe is not None:
             doc.unsafe = corrected_unsafe
-        if corrected_category or corrected_unsafe is not None:
-            if corrected_category:
-                doc.primary_category = ClassificationCategory[corrected_category.upper().replace(" ", "_")]
+        if corrected_category:
+            doc.primary_category = ClassificationCategory[corrected_category.upper().replace(" ", "_")]
+        # an approval ("confirmation") closes the review just like a correction does
+        if corrected_category or corrected_unsafe is not None or feedback.feedback_type == FeedbackType.CONFIRMATION:
             doc.reviewed_by = reviewer_name
             doc.reviewed_at = datetime.utcnow()
             doc.requires_review = False
+            if doc.status == DocumentStatus.PENDING_REVIEW:
+                doc.status = DocumentStatus.COMPLETED
 
         db.commit()
 
@@ -459,13 +489,13 @@ async def submit_feedback(
             action="feedback_submitted",
             entity_type="feedback",
             entity_id=feedback.id,
-            description=f"Feedback submitted by {reviewer_name} for document {document_id}",
+            description=f"Feedback submitted by {reviewer_name} for document {doc.id}",
             success=True
         )
         db.add(audit)
         db.commit()
 
-        logger.info(f"Feedback submitted for document {document_id} by {reviewer_name}")
+        logger.info(f"Feedback submitted for document {doc.id} by {reviewer_name}")
 
         return {
             "feedback_id": feedback.id,

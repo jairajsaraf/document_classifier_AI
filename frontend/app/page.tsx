@@ -69,7 +69,7 @@ const columns: ColumnDef<typeof features, DocRow>[] = [
   },
   {
     id: 'status',
-    accessorFn: (r) => STATUS[r.status] ?? r.status,
+    accessorFn: (r) => (r.reviewed ? 'Reviewed' : STATUS[r.status] ?? r.status),
     header: 'Status',
     sortFn: 'text',
     cell: ({ getValue }) => <span className="text-text-2">{getValue() as string}</span>,
@@ -127,7 +127,7 @@ export default function Queue() {
     setBusy(true)
     try {
       setStatus({ text: 'Uploading' })
-      const up = await api<{ document_id: number }>('/api/documents/upload', { method: 'POST', body: new FormData(form) })
+      const up = await api<{ document_id: string }>('/api/documents/upload', { method: 'POST', body: new FormData(form) })
       load()
       setStatus({ text: 'Classifying, usually 15 to 30 seconds' })
       await api(`/api/documents/${up.document_id}/classify`, { method: 'POST' })
@@ -177,6 +177,7 @@ export default function Queue() {
               </div>
               <p className="text-xs text-text-2">
                 Do not upload real personal data. The text is sent to the Anthropic API for classification.
+                Uploads, and reviews you save, are visible to everyone and are erased when this free demo goes to sleep after 15 idle minutes.
               </p>
             </form>
           </div>

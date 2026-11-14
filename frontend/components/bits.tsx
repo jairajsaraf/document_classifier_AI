@@ -8,13 +8,14 @@ export type Sensitivity = 'Public' | 'Confidential' | 'Highly Sensitive'
 export const SENSITIVITIES: Sensitivity[] = ['Public', 'Confidential', 'Highly Sensitive']
 
 export type DocRow = {
-  id: number
+  id: string
   filename: string
   status: string
   sensitivity: Sensitivity | null
   unsafe: boolean | null
   confidence: number | null
   requires_review: boolean
+  reviewed?: boolean
   created_at: string
 }
 
@@ -27,7 +28,7 @@ export type Citation = {
 }
 
 export type Detail = {
-  document: { id: number; filename: string; status: string; page_count: number | null; created_at: string }
+  document: { id: string; filename: string; status: string; page_count: number | null; created_at: string }
   classification: {
     sensitivity: Sensitivity
     unsafe: boolean | null

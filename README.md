@@ -206,7 +206,7 @@ The app runs as one free Render web service (Docker), defined in `render.yaml` (
 
 ## Team
 
-**TAMU Datathon 2025 - Team [Your Team Name]**
+**TAMU Datathon 2025 - Team VibeTribe**
 
 ## License
 

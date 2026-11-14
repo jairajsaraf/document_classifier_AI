@@ -333,10 +333,12 @@ def build():
                f"Message our agent today: {d.e('PHONE', '(312) 555-0117', 'no', BIZ)}")
     add(d)
 
-    d = Doc("SYN23", "conf_safeguarding_child_safety", "Confidential", "yes", R_CONF_INTERNAL, R_UNSAFE,
-            "Unsafe at Confidential level: child-safety concern (grooming indicators, non-sexual) quoted in an "
-            "internal school report. Names of a minor and an adult: Confidential under the docx rules, which "
-            "reserve Highly Sensitive for SSNs, account/card numbers and schematics.")
+    # The slug keeps "conf" so the file name, and with it every saved run record, stays stable.
+    d = Doc("SYN23", "conf_safeguarding_child_safety", "Highly Sensitive", "yes", R_HS, R_UNSAFE,
+            "Unsafe at Highly Sensitive level: child-safety concern (grooming indicators, non-sexual) quoted in "
+            "an internal school report. RELABELLED from Confidential (user, 2026-11-13, FAILURES.md F16): a "
+            "minor's identity in a child-protection record counts as Highly Sensitive. This is a user decision, "
+            "not a docx derivation: the quoted docx line names only SSNs, account/card numbers and schematics.")
     d.page().p("Safeguarding concern report - internal, restricted",
                f"Student: {d.e('PERSON', name())}, Year 7 (age 12)",
                f"Adult concerned: {d.e('PERSON', name())}, parent volunteer")
@@ -479,7 +481,7 @@ def check(docs):
         n = len(pypdf.PdfReader(ROOT / r["file"], strict=r["source"] == "synthetic").pages)
         assert n == int(r["pages"]), f"{r['doc_id']}: {n} pages, golden says {r['pages']}"
     counts = collections.Counter(r["sensitivity"] for r in rows if r["source"] == "synthetic")
-    assert all(6 <= c <= 8 for c in counts.values()) and len(counts) == 3, counts
+    assert all(6 <= c <= 9 for c in counts.values()) and len(counts) == 3, counts  # 9: SYN23 relabel (F16)
     texts = {d.doc_id: [p.extract_text() or "" for p in
                         pypdf.PdfReader(OUT / f"{d.doc_id}_{d.slug}.pdf").pages] for d in docs}
     keys = [(e[0], e[3]) for d in docs for e in d.ents]

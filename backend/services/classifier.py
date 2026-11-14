@@ -2,7 +2,11 @@
 Classification Engine
 Core LLM-based document classification with dual verification
 """
+import base64
 import json
+import re
+from pathlib import Path
+
 import anthropic
 import openai
 from typing import Dict, List, Optional, Tuple
@@ -15,11 +19,52 @@ from backend.services.pii_detector import PIIDetector
 from backend.services.content_safety import ContentSafetyChecker
 
 SENSITIVITY_LEVELS = ("Public", "Confidential", "Highly Sensitive")
+# Native PDF request shapes (docs/FEATURES.md). Citations and output_config.format cannot share a request
+# (Citations docs: the API returns 400), hence three shapes.
+PDF_MODES = ("pdf_citations", "pdf_two_call", "pdf_structured")
 
 
 def _as_bool(v) -> bool:
     """The model may answer true/false or "yes"/"no"."""
     return v is True or str(v).strip().lower() in ("true", "yes")
+
+
+def _norm(s) -> str:
+    return re.sub(r"\s+", " ", s or "").strip().casefold()
+
+
+def quote_on_page(quote, page_text) -> bool:
+    """Every '...'-separated segment of the quote must appear on the page (whitespace/case-insensitive)."""
+    segs = [_norm(s).strip("\"'“”‘’ ") for s in re.split(r"\.\.\.|…", quote or "")]
+    segs = [s for s in segs if s]
+    page = _norm(page_text)
+    return bool(segs) and all(s in page for s in segs)
+
+
+def _text(message) -> str:
+    # Haiku 5.5 may lead with a thinking block: read text blocks by type
+    return "".join(b.text for b in message.content if b.type == "text")
+
+
+def _schema(with_citations: bool) -> Dict:
+    """JSON schema for output_config.format. No minimum/maximum: the Structured outputs docs reject them."""
+    props = {
+        "sensitivity": {"type": "string", "enum": list(SENSITIVITY_LEVELS)},
+        "unsafe": {"type": "boolean"},
+        "confidence": {"type": "number"},
+        "summary": {"type": "string"},
+        "reasoning": {"type": "string", "description": "Short explanation of the decision"},
+    }
+    if with_citations:
+        cite = {
+            "page_number": {"type": "integer"},
+            "evidence_type": {"type": "string", "enum": ["text", "image"]},
+            "evidence_text": {"type": "string"},
+            "relevance": {"type": "string"},
+        }
+        props["citations"] = {"type": "array", "items": {
+            "type": "object", "properties": cite, "required": list(cite), "additionalProperties": False}}
+    return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
 
 
 class DocumentClassifier:
@@ -98,8 +143,13 @@ class DocumentClassifier:
                 doc_content,
                 pii_results,
                 safety_results,
-                model=settings.PRIMARY_LLM_MODEL
+                model=settings.PRIMARY_LLM_MODEL,
+                file_path=file_path
             )
+            # Structured outputs docs: the capitalisation of enum values is not guaranteed
+            said = _norm(str(primary_result.get("sensitivity")))
+            primary_result["sensitivity"] = next(
+                (s for s in SENSITIVITY_LEVELS if s.casefold() == said), primary_result.get("sensitivity"))
             if primary_result.get("sensitivity") not in SENSITIVITY_LEVELS:
                 raise ValueError(f"model returned no valid sensitivity: {primary_result.get('sensitivity')!r}")
             primary_result["unsafe"] = _as_bool(primary_result.get("unsafe"))
@@ -181,7 +231,8 @@ class DocumentClassifier:
         doc_content: Dict,
         pii_results: Dict,
         safety_results: Dict,
-        model: str = None
+        model: str = None,
+        file_path: str = None
     ) -> Dict:
         """
         Perform classification using LLM
@@ -192,12 +243,17 @@ class DocumentClassifier:
             pii_results: PII detection results
             safety_results: Safety check results
             model: Model to use (defaults to PRIMARY_LLM_MODEL)
+            file_path: the source file, sent as is when LLM_INPUT_MODE is a native PDF shape
 
         Returns:
             Classification result
         """
         if model is None:
             model = settings.PRIMARY_LLM_MODEL
+
+        mode = settings.LLM_INPUT_MODE
+        if mode in PDF_MODES and "claude" in model.lower() and str(file_path).lower().endswith(".pdf"):
+            return self._classify_pdf(mode, file_path, pii_results, safety_results, model)
 
         # Generate prompt
         prompt = self.prompt_manager.generate_final_classification_prompt(
@@ -250,8 +306,76 @@ class DocumentClassifier:
 
         return self._parse_classification_response(result)
 
-    def _call_anthropic(self, prompt: str, model: str) -> str:
-        """Call Anthropic Claude API"""
+    def _classify_pdf(self, mode: str, file_path: str, pii_results: Dict, safety_results: Dict, model: str) -> Dict:
+        """Send the PDF itself (page images plus text) in one of the three PDF_MODES request shapes."""
+        data = base64.standard_b64encode(Path(file_path).read_bytes()).decode("ascii")
+
+        def ask(response_format, citations=False, schema=None, label=None):
+            document = {"type": "document",
+                        "source": {"type": "base64", "media_type": "application/pdf", "data": data}}
+            if citations:
+                document["citations"] = {"enabled": True}
+            if mode == "pdf_two_call":
+                document["cache_control"] = {"type": "ephemeral"}
+            prompt = self.prompt_manager.generate_final_classification_prompt(
+                None, pii_results, safety_results, response_format, label)
+            extra = {"output_config": {"format": {"type": "json_schema", "schema": schema}}} if schema else {}
+            # PDF support docs: the document block goes before the text block
+            return self._create(model, [document, {"type": "text", "text": prompt}], **extra)
+
+        if mode == "pdf_citations":
+            return self._parse_cited_lines(ask("lines", citations=True))
+        structured = mode == "pdf_structured"
+        result = self._parse_classification_response(
+            _text(ask("schema" if structured else "label", schema=_schema(with_citations=structured))))
+        if mode == "pdf_two_call" and result.get("sensitivity") in SENSITIVITY_LEVELS:
+            result["citations"] = self._parse_cited_lines(ask("evidence", citations=True, label=result))["citations"]
+        return result
+
+    def _parse_cited_lines(self, message) -> Dict:
+        """Parse a "field: value" reply whose text blocks carry API citations.
+
+        Citations docs ("Get structured data with citations"): add each block's text to the current line,
+        attach its citations to every line holding part of that text, and expect that neither a value nor
+        a citation is guaranteed. Evidence lines without a citation are kept with no page.
+        """
+        lines = [["", []]]
+        for block in message.content:
+            if block.type != "text":
+                continue
+            for i, part in enumerate(block.text.split("\n")):
+                if i:
+                    lines.append(["", []])
+                lines[-1][0] += part
+                if part.strip():
+                    lines[-1][1].extend(getattr(block, "citations", None) or [])
+        result = {"citations": []}
+        for line, cites in lines:
+            name, _, value = line.partition(":")
+            name, value = name.strip(" *-#").lower(), value.strip()
+            if not value:
+                continue
+            if name in ("sensitivity", "unsafe", "confidence"):
+                result.setdefault(name, value.strip(" .*`\"'"))
+            elif name in ("summary", "reasoning"):
+                result.setdefault(name, value)
+            relevance = value if name == "evidence" else f"{name}: {value}"
+            for c in cites:
+                # "api": cited_text is extracted by the API, so it is a valid pointer into the PDF by construction
+                result["citations"].append({
+                    "page_number": getattr(c, "start_page_number", None), "evidence_type": "text",
+                    "evidence_text": getattr(c, "cited_text", ""), "relevance": relevance, "source": "api"})
+            if name == "evidence" and not cites:
+                result["citations"].append({"page_number": None, "evidence_type": "uncited",
+                                            "evidence_text": value, "relevance": value})
+        try:
+            result["confidence"] = float(result.get("confidence"))
+        except (TypeError, ValueError):
+            result["confidence"] = 0.0  # no usable score: the low-confidence HITL trigger fires
+        return result
+
+    def _create(self, model: str, content, **extra):
+        """One Messages API request; `content` is the prompt string or a list of content blocks."""
         if not self.anthropic_client:
             raise ValueError("Anthropic client not initialized")
 
@@ -260,14 +384,22 @@ class DocumentClassifier:
                 model=model,
                 max_tokens=settings.MAX_TOKENS,
                 messages=[
-                    {"role": "user", "content": prompt}
-                ]
+                    {"role": "user", "content": content}
+                ],
+                **extra
             )
-            # Haiku 5.5 may lead with a thinking block: read text blocks by type
-            return "".join(b.text for b in message.content if b.type == "text")
         except Exception as e:
             logger.error(f"Anthropic API call failed: {e}")
             raise
+        # Structured outputs docs: after a refusal or a max_tokens stop the reply may not match the schema
+        stop = getattr(message, "stop_reason", None)
+        if stop in ("refusal", "max_tokens"):
+            raise ValueError(f"model stopped with {stop}")
+        return message
+
+    def _call_anthropic(self, prompt: str, model: str) -> str:
+        """Call Anthropic Claude API"""
+        return _text(self._create(model, prompt))
 
     def _call_openai(self, prompt: str, model: str) -> str:
         """Call OpenAI API"""
@@ -329,9 +461,13 @@ class DocumentClassifier:
         """Generate citation evidence for classification"""
         citations = []
 
-        # Add citations from LLM response if present
-        if "citations" in classification:
-            citations.extend(classification["citations"])
+        # Add citations from LLM response if present; `verified` = the quote is on the cited page (F13)
+        pages = {p.get("page_number"): p.get("text", "") for p in doc_content.get("pages", [])}
+        for c in classification.get("citations") or []:
+            if isinstance(c, dict):
+                if c.get("evidence_type") != "image":
+                    c["verified"] = quote_on_page(c.get("evidence_text"), pages.get(c.get("page_number"), ""))
+                citations.append(c)
 
         # Add PII citations
         if pii_results.get("pii_detected"):

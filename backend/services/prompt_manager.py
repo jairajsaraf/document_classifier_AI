@@ -7,6 +7,35 @@ from typing import Dict, List, Optional
 from pathlib import Path
 from loguru import logger
 
+from backend.config import settings
+
+# Reply instructions for the native-PDF request shapes (docs/FEATURES.md). The line forms follow the
+# Citations docs ("Get structured data with citations"): one "field: value" line, cited per line.
+REPLY_FORMATS = {
+    "schema": (
+        'For text evidence set evidence_type to "text" and copy evidence_text word for word from that page. '
+        'For evidence that is visible only in an image set evidence_type to "image" and describe the region '
+        "of the page in evidence_text."
+    ),
+    "label": "Give both labels, a confidence score, a one-sentence summary and a short explanation of the decision.",
+    "lines": (
+        "Answer with one line per field, in exactly this form and with no other text:\n"
+        "sensitivity: Public, Confidential or Highly Sensitive\n"
+        "unsafe: true or false\n"
+        "confidence: a number from 0 to 1\n"
+        "summary: one sentence\n"
+        "reasoning: a short explanation of the decision, on one line\n"
+        "evidence: what the passage shows and why it supports the decision\n"
+        'Write one "evidence:" line for each piece of evidence, and cite the document for each evidence line.'
+    ),
+    "evidence": (
+        "The document has been classified as sensitivity = {sensitivity}, unsafe = {unsafe}.\n"
+        'List the evidence for that decision, one piece per line. Start each line with "evidence:" and say '
+        "what the passage shows and why it supports the decision. Cite the document for each line. "
+        "Write nothing else."
+    ),
+}
+
 
 class PromptManager:
     """Manage and generate dynamic prompts for classification"""
@@ -99,17 +128,21 @@ class PromptManager:
 
     def generate_final_classification_prompt(
         self,
-        document_content: str,
+        document_content: Optional[str],
         pii_results: Dict,
-        safety_results: Dict
+        safety_results: Dict,
+        response_format: str = "json",
+        label: Dict = None
     ) -> str:
         """
         Generate final classification prompt with all context
 
         Args:
-            document_content: Document text
+            document_content: Document text; None when the PDF itself is attached to the request
             pii_results: Results from PII detection
             safety_results: Results from safety check
+            response_format: "json" (text in the prompt, JSON reply) or a REPLY_FORMATS key
+            label: the labels already decided, for the "evidence" request
 
         Returns:
             Complete prompt for final classification
@@ -120,14 +153,18 @@ class PromptManager:
         full_prompt = f"{self.get_system_prompt()}\n\n"
         full_prompt += f"## Category Definitions\n{self._format_categories()}\n\n"
 
-        # Add PII context
-        full_prompt += f"## PII Detection Results\n"
-        if pii_results.get("pii_detected"):
-            full_prompt += f"- PII Detected: Yes\n"
-            full_prompt += f"- Types: {', '.join(pii_results.get('pii_types', []))}\n"
-            full_prompt += f"- Severity: {pii_results.get('severity', 'unknown')}\n"
-        else:
-            full_prompt += "- PII Detected: No\n"
+        if settings.PROMPT_FAIL_CLOSED:
+            full_prompt += f"## Decision Rule\n{self.prompt_library.get('fail_closed_rule', '')}\n"
+
+        # Add PII context. F9: the regex cannot tell an SSN from an SSN-shaped order ID, and the model defers to it.
+        if settings.PROMPT_PII_HINTS:
+            full_prompt += f"## PII Detection Results\n"
+            if pii_results.get("pii_detected"):
+                full_prompt += f"- PII Detected: Yes\n"
+                full_prompt += f"- Types: {', '.join(pii_results.get('pii_types', []))}\n"
+                full_prompt += f"- Severity: {pii_results.get('severity', 'unknown')}\n"
+            else:
+                full_prompt += "- PII Detected: No\n"
 
         # Add safety context
         full_prompt += f"\n## Content Safety Results\n"
@@ -139,12 +176,22 @@ class PromptManager:
         else:
             full_prompt += "- Content is Safe: Yes\n"
 
+        if document_content is None:
+            document_content = ("The document is attached as a PDF. Page numbers are positions in that PDF, "
+                                "starting at 1.")
+        if response_format == "evidence":
+            final_prompt = REPLY_FORMATS["evidence"].format(**label)
         full_prompt += f"\n## Task\n{final_prompt}\n\n"
         full_prompt += f"## Document Content\n{document_content}\n\n"
-        full_prompt += f"## Instructions\n"
-        full_prompt += self._get_citation_instructions()
-        full_prompt += "\n\nProvide your response in the following JSON format:\n"
-        full_prompt += self._get_response_format()
+        if response_format == "json":
+            full_prompt += f"## Instructions\n"
+            full_prompt += self._get_citation_instructions()
+            full_prompt += "\n\nProvide your response in the following JSON format:\n"
+            full_prompt += self._get_response_format()
+        elif response_format == "schema":
+            full_prompt += f"## Instructions\n{self._get_citation_instructions()}\n{REPLY_FORMATS['schema']}"
+        elif response_format != "evidence":
+            full_prompt += f"## Instructions\n{REPLY_FORMATS[response_format]}"
 
         return full_prompt
 
@@ -243,7 +290,10 @@ class PromptManager:
 
         for cat_name, cat_info in categories.items():
             formatted.append(f"### {cat_name}")
-            formatted.append(f"Description: {cat_info.get('description', '')}")
+            description = cat_info.get('description', '')
+            if cat_name == "Highly Sensitive" and settings.PROMPT_WIDE_HS:
+                description += ". " + self.prompt_library.get("highly_sensitive_extension", "")
+            formatted.append(f"Description: {description}")
             formatted.append(f"Keywords: {', '.join(cat_info.get('keywords', []))}")
             formatted.append("")
 

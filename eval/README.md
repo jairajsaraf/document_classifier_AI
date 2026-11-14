@@ -11,7 +11,7 @@ Nothing here has been run against a model yet.
 | File | What it holds |
 |---|---|
 | `golden.csv` | One row per document: label, `scored` flag, page and image counts, the two docx quotes the label derives from, and a notes column for decisions and conflicts. |
-| `synthetic/SYNnn_*.pdf` | 24 synthetic documents: 8 Public, 8 Confidential, 8 Highly Sensitive. **Not committed.** `*.pdf` is already in `.gitignore`, so regenerate them. |
+| `synthetic/SYNnn_*.pdf` | 24 synthetic documents: 8 Public, 7 Confidential, 9 Highly Sensitive (SYN23 was relabelled, decision 8). **Not committed.** `*.pdf` is already in `.gitignore`, so regenerate them. |
 | `synthetic/pii_manifest.csv` | Every planted entity, with `doc_id, page, entity_type, value, modality, is_pii, note`. Rows with `is_pii=no` are decoys a detector should not flag. |
 | `make_synthetic.py` | Writes all of the above. The CSVs are generated too, so do not edit them by hand. |
 
@@ -30,7 +30,7 @@ Requirements and determinism:
 `--check` asserts that:
 - every quote is a verbatim substring of the docx;
 - every PDF's page count matches `golden.csv`, and synthetic PDFs open in pypdf strict mode;
-- each class has 6-8 synthetic documents;
+- each class has 6-9 synthetic documents;
 - no entity value repeats within a document;
 - every text entity can be extracted from its stated page;
 - no image entity appears in the extracted text, which proves those cases need OCR or vision.
@@ -59,6 +59,8 @@ Precedence is inferred: any Highly Sensitive trigger makes the document Highly S
 5. **Image count means every image placement** that pypdf reports (`page.images`), logos and icons included. TC2's 3 placements are 2 unique images.
 6. **Business contacts and public figures are not PII** (`is_pii=no`). This covers company emails, phones and showroom addresses on public material, the fictional senator in SYN04, and the recruiter's number in SYN22.
 7. **PDFs are regenerated, not committed.**
+8. **SYN23 is Highly Sensitive** (Phase 3, `docs/FAILURES.md` F16). A minor's identity in a child-protection record counts as Highly Sensitive. This is a decision, not a docx derivation: the docx line quoted in its row names only SSNs, account/card numbers and schematics. The PDF is unchanged (set hash still `54515af65bd01e66`), and the file keeps its `conf_` name so saved run records still match. Numbers measured before this change are restated under the new label in `eval/runs_phase2/metrics_syn23_relabelled.md`.
+9. **TC2 stays Highly Sensitive and the prompt definition is widened instead** (Phase 3, F2) to cover a private individual's application or personnel record. No label changed.
 
 ## Hard cases included
 
@@ -70,8 +72,8 @@ Precedence is inferred: any Highly Sensitive trigger makes the document Highly S
 | PII only inside an image-only page | SYN13 (customer name and address), SYN19 (name and SSN) |
 | Image page without PII | SYN03 (marketing), SYN20 (schematic drawing) |
 | Unsafe, Public level | SYN04 political news, SYN05 violent news, SYN22 exploitative (forced-labour job ad) |
-| Unsafe, Confidential level | SYN12 cyber-threat, SYN23 child safety (grooming indicators) |
-| Unsafe, Highly Sensitive level | SYN21 criminal, SYN24 hate speech |
+| Unsafe, Confidential level | SYN12 cyber-threat |
+| Unsafe, Highly Sensitive level | SYN21 criminal, SYN23 child safety (grooming indicators), SYN24 hate speech |
 
 Every unsafe kind the docx lists now has at least one document. The unsafe examples are deliberately mild and non-graphic:
 - The hate-speech line is dehumanising but contains no slurs.

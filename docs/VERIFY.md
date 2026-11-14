@@ -77,7 +77,7 @@ Fix: `CLIENT_IP_HEADER=cf-connecting-ip`, set in the Render dashboard (and in `r
 
 ## Cold start
 
-See the end of this file: the idle-wake measurement.
+About 32 s for the first request after 17 idle minutes (one measurement, see the end of this file).
 
 ## Cost
 
@@ -133,4 +133,11 @@ Record per participant: the three times, three yes/no's, any chip they could not
 
 ## Idle wake-up measurement
 
-(pending)
+One measurement (2026-11-14, from the project owner's network): no request to the service for about 17 minutes (the last was at 02:29 local time; the free plan spins down after 15 idle minutes, https://render.com/docs/free), then `curl` for `/`:
+
+| Request | Result |
+|---|---|
+| First, at 02:46:46 | HTTP 200 after **32.5 s** (`time_total`) |
+| Second, right after (`/health`) | HTTP 200 after 0.4 s |
+
+Render's docs say "about one minute" to spin up; this one took about half that. A single run, so the spread is **unknown**. That the instance had really spun down is **inferred** from the 32 s delay; the dashboard was not checked. The Playwright spec's wake-up poll allows 170 s.

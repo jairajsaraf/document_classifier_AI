@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import uvicorn
 import os
+import mimetypes
 import uuid
 from datetime import datetime
 from loguru import logger
@@ -45,11 +46,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files for frontend
-frontend_path = Path(__file__).parent.parent / "frontend" / "public"
-if frontend_path.exists():
-    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
-
 # Initialize database
 @app.on_event("startup")
 async def startup_event():
@@ -58,15 +54,6 @@ async def startup_event():
     init_db()
     logger.info("Database initialized")
 
-# Serve frontend UI
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend():
-    """Serve the frontend UI"""
-    frontend_file = Path(__file__).parent.parent / "frontend" / "public" / "index.html"
-    if frontend_file.exists():
-        return FileResponse(frontend_file)
-    return {"message": "Frontend not found. Visit /docs for API documentation"}
-
 # API Status endpoint
 @app.get("/api")
 async def api_root():
@@ -74,7 +61,8 @@ async def api_root():
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "status": "running"
+        "status": "running",
+        "model": settings.PRIMARY_LLM_MODEL
     }
 
 @app.get("/health")
@@ -239,7 +227,8 @@ async def classify_document_endpoint(
                     evidence_text=citation.get("evidence_text"),
                     evidence_description=citation.get("relevance", ""),
                     relevance_score=citation.get("relevance_score", 0.8),
-                    supporting_category=result["sensitivity"]
+                    supporting_category=result["sensitivity"],
+                    verified=citation.get("verified")
                 )
                 db.add(evidence)
 
@@ -367,11 +356,22 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
                 "page_number": c.page_number,
                 "evidence_type": c.evidence_type,
                 "evidence_text": c.evidence_text,
-                "description": c.evidence_description
+                "description": c.evidence_description,
+                "verified": c.verified
             }
             for c in citations
         ]
     }
+
+@app.get("/api/documents/{document_id}/file")
+async def get_document_file(document_id: int, db: Session = Depends(get_db)):
+    """The stored upload, shown inline in the document view"""
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc or not os.path.isfile(doc.file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    # type from the validated extension, never the client's claimed content type (no HTML on this origin)
+    media_type = mimetypes.guess_type(doc.filename)[0] or "application/octet-stream"
+    return FileResponse(doc.file_path, media_type=media_type, headers={"X-Content-Type-Options": "nosniff"})
 
 @app.get("/api/documents")
 async def list_documents(
@@ -475,6 +475,11 @@ async def submit_feedback(
     except Exception as e:
         logger.error(f"Feedback submission failed: {e}")
         raise HTTPException(status_code=500, detail=f"Feedback submission failed: {str(e)}")
+
+# Built UI (`next build` static export). Mounted last so every route above wins.
+ui_dir = Path(__file__).parent.parent / "frontend" / "out"
+if ui_dir.exists():
+    app.mount("/", StaticFiles(directory=str(ui_dir), html=True), name="ui")
 
 if __name__ == "__main__":
     uvicorn.run(

@@ -61,6 +61,7 @@ class CitationEvidence(Base):
     evidence_type = Column(String(50), nullable=False)  # text, image, metadata
     evidence_text = Column(Text, nullable=True)
     evidence_description = Column(Text, nullable=False)
+    verified = Column(Boolean, nullable=True)  # quote found on the cited page; None = not checked (PII, image)
 
     # Relevance
     relevance_score = Column(Float, nullable=False)

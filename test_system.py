@@ -362,6 +362,23 @@ def test_classify_saves_and_serves_two_fields(client):
     assert (listed[doc_id]["sensitivity"], listed[doc_id]["unsafe"]) == ("Confidential", True)
 
 
+def test_ui_endpoints_serve_file_verified_flag_and_model(client):
+    # Phase 4b: the document view loads the upload, shows whether each quote was found, names the model
+    doc_id = upload(client, "memo.pdf").json()["document_id"]
+    client.post(f"/api/documents/{doc_id}/classify")
+    f = client.get(f"/api/documents/{doc_id}/file")
+    assert f.status_code == 200 and f.content == b"%PDF-1.4 test"
+    cites = client.get(f"/api/documents/{doc_id}").json()["citations"]
+    assert [c["verified"] for c in cites if c["evidence_type"] == "text"] == [False]  # "x" is not in "Internal memo."
+    assert client.get("/api/documents/999999/file").status_code == 404
+    # the served type comes from the extension, not the uploader's claimed type
+    evil = client.post("/api/documents/upload", files={"file": ("x.pdf", b"<script>1</script>", "text/html")})
+    served = client.get(f"/api/documents/{evil.json()['document_id']}/file")
+    assert served.headers["content-type"] == "application/pdf"
+    assert served.headers["x-content-type-options"] == "nosniff"
+    assert client.get("/api").json()["model"] == settings.PRIMARY_LLM_MODEL
+
+
 def test_classify_with_default_settings_and_no_openai_key(client):
     # the shipped path: classify_document is called without use_dual_verification and there is no OpenAI key
     doc_id = upload(client, "memo.pdf").json()["document_id"]

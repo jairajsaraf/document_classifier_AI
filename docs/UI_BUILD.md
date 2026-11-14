@@ -55,6 +55,7 @@ Eval figures in the header strip come from `eval/runs_phase3/combo/metrics.md` a
 | Browser, desktop | queue sorts (with `aria-sort`) and filters by name and label; upload of a fake PDF shows the server error and a Failed row; citation p.13 on TC4 jumps to page 13 and marks the quote; approve saved feedback #1; override to Public saved #2 and the panel showed Public (restored afterwards) |
 | Broken file in the document view | Before the fix, a file that is not a valid PDF crashed the whole view: react-pdf 11 suspends by default and throws load errors to the nearest error boundary (confirmed: installed react-pdf README, "Suspense" section). With `suspense={false}` the pane shows "Could not load this PDF" and the panel says "Classification failed for this file" |
 | `npm ci` then `npm run build` in `frontend/` | passes |
+| More than 100 documents (PR #6 review) | `GET /api/documents` now orders by id. The queue reads every 100-row page up to `total`: with 106 documents the API's first page held 100, and the queue showed all 106 |
 
 **The seeded rows exist only in the local container's database** (`/tmp/ui.db`). A fresh checkout shows an empty queue until Phase 5 seeds on boot.
 

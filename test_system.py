@@ -379,6 +379,16 @@ def test_ui_endpoints_serve_file_verified_flag_and_model(client):
     assert client.get("/api").json()["model"] == settings.PRIMARY_LLM_MODEL
 
 
+def test_document_list_pages_without_overlap(client):
+    # PR #6 review: the queue reads every page, so skip/limit must not repeat or drop rows
+    for i in range(3):
+        upload(client, f"p{i}.pdf")
+    total = client.get("/api/documents").json()["total"]
+    ids = [d["id"] for skip in range(0, total, 2)
+           for d in client.get("/api/documents", params={"skip": skip, "limit": 2}).json()["documents"]]
+    assert len(ids) == total == len(set(ids)) and ids == sorted(ids)
+
+
 def test_classify_with_default_settings_and_no_openai_key(client):
     # the shipped path: classify_document is called without use_dual_verification and there is no OpenAI key
     doc_id = upload(client, "memo.pdf").json()["document_id"]

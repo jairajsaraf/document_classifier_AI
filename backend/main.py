@@ -386,7 +386,7 @@ async def list_documents(
     if status:
         query = query.filter(Document.status == status)
 
-    documents = query.offset(skip).limit(limit).all()
+    documents = query.order_by(Document.id).offset(skip).limit(limit).all()  # stable order so pages don't overlap
 
     return {
         "documents": [

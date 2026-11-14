@@ -96,13 +96,22 @@ export default function Queue() {
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(() => {
-    api<{ documents: DocRow[] }>('/api/documents').then(
-      (r) => { setDocs(r.documents); setLoadError(null) },
-      (e: Error) => setLoadError(e.message),
-    )
+  // the API pages at 100 rows; read every page so sorting and filtering see all documents
+  const load = useCallback(async () => {
+    try {
+      const all: DocRow[] = []
+      for (;;) {
+        const r = await api<{ documents: DocRow[]; total: number }>(`/api/documents?skip=${all.length}&limit=100`)
+        all.push(...r.documents)
+        if (!r.documents.length || all.length >= r.total) break
+      }
+      setDocs(all)
+      setLoadError(null)
+    } catch (e) {
+      setLoadError((e as Error).message)
+    }
   }, [])
-  useEffect(load, [load])
+  useEffect(() => { load() }, [load])
 
   const table = useTable({
     features,

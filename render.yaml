@@ -34,4 +34,4 @@ services:
       - key: MAX_PDF_PAGES
         value: "25"
       - key: CLIENT_IP_HEADER
-        value: "x-forwarded-for"   # see docs/VERIFY.md for what was measured
+        value: "cf-connecting-ip"  # Render sits behind Cloudflare; the last X-Forwarded-For entry rotates (docs/VERIFY.md)

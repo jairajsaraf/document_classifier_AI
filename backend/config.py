@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     )
     USE_DUAL_VERIFICATION: bool = Field(default=False, env="USE_DUAL_VERIFICATION")
     CONFIDENCE_THRESHOLD: float = Field(default=0.85, env="CONFIDENCE_THRESHOLD")
+    # Phase 3 switches (docs/FEATURES.md). Each default is the measured, shipped behaviour.
+    # text | pdf_citations | pdf_two_call | pdf_structured (the pdf_* shapes apply to .pdf files only)
+    LLM_INPUT_MODE: str = Field(default="text", env="LLM_INPUT_MODE")
+    # The three prompt defaults are the `combo` arm; the Phase 2 prompt is true / false / false.
+    PROMPT_PII_HINTS: bool = Field(default=False, env="PROMPT_PII_HINTS")     # regex PII block in the prompt (F9)
+    PROMPT_FAIL_CLOSED: bool = Field(default=True, env="PROMPT_FAIL_CLOSED")  # Public only on clear evidence (F1)
+    PROMPT_WIDE_HS: bool = Field(default=True, env="PROMPT_WIDE_HS")          # widened Highly Sensitive (F2, F16)
     MAX_TOKENS: int = Field(default=4096, env="MAX_TOKENS")
     TEMPERATURE: float = Field(default=0.1, env="TEMPERATURE")
 

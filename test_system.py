@@ -19,7 +19,8 @@ TMP = Path(tempfile.mkdtemp())
 # settings are read at import time, so point the DB and upload dir at a temp dir first
 os.environ.update(DATABASE_URL=f"sqlite:///{(TMP / 't.db').as_posix()}", UPLOAD_DIR=str(TMP / "uploads"),
                   ANTHROPIC_API_KEY="test-key-not-real", OPENAI_API_KEY="")
-for k in ("PRIMARY_LLM_MODEL", "USE_DUAL_VERIFICATION"):
+for k in ("PRIMARY_LLM_MODEL", "USE_DUAL_VERIFICATION", "LLM_INPUT_MODE", "PROMPT_PII_HINTS",
+          "PROMPT_FAIL_CLOSED", "PROMPT_WIDE_HS", "MAX_TOKENS"):
     os.environ.pop(k, None)
 sys.path.insert(0, str(ROOT))
 
@@ -171,6 +172,125 @@ def test_classifier_fails_on_invalid_sensitivity(reply):
     fake_doc(clf, "text")
     fake_llm(clf, reply)
     assert clf.classify_document("x.pdf", use_dual_verification=False)["status"] == "failed"
+
+
+# ---------------------------------------------------------------- Phase 3 switches (docs/FEATURES.md)
+def cited(text, page=None, quote=None):
+    """A text block as the Citations API returns it: `citations` is None or a list of page locations."""
+    cites = page and [SimpleNamespace(type="page_location", cited_text=quote, start_page_number=page,
+                                      end_page_number=page + 1)]
+    return SimpleNamespace(type="text", text=text, citations=cites)
+
+
+def fake_api(clf, *replies, stop="end_turn"):
+    """Replace the Anthropic call with canned replies (a dict = JSON text, a list = content blocks);
+    return the request kwargs it received."""
+    seen, queue = [], list(replies)
+
+    def create(**kw):
+        seen.append(kw)
+        reply = queue.pop(0)
+        blocks = reply if isinstance(reply, list) else [SimpleNamespace(type="text", text=json.dumps(reply))]
+        return SimpleNamespace(content=blocks, stop_reason=stop)
+    clf.anthropic_client = SimpleNamespace(messages=SimpleNamespace(create=create))
+    return seen
+
+
+def pdf_classifier(monkeypatch, mode):
+    monkeypatch.setattr(settings, "LLM_INPUT_MODE", mode)
+    clf = DocumentClassifier()
+    fake_doc(clf, "Internal memo about staffing.")
+    return clf
+
+
+def test_prompt_switches(monkeypatch):
+    def prompt():
+        return PromptManager().generate_final_classification_prompt("doc text", {"pii_detected": True,
+                                                                    "pii_types": ["ssn"], "severity": "high"},
+                                                                    {"is_safe": True})
+    # shipped defaults = the measured `combo` arm (docs/FEATURES.md)
+    assert (settings.PROMPT_PII_HINTS, settings.PROMPT_FAIL_CLOSED, settings.PROMPT_WIDE_HS) == (False, True, True)
+    monkeypatch.setattr(settings, "PROMPT_PII_HINTS", True)  # the Phase 2 prompt
+    monkeypatch.setattr(settings, "PROMPT_FAIL_CLOSED", False)
+    monkeypatch.setattr(settings, "PROMPT_WIDE_HS", False)
+    base = prompt()
+    assert "## PII Detection Results" in base and "Severity: high" in base
+    assert "## Decision Rule" not in base and "safeguarding" not in base
+    monkeypatch.setattr(settings, "PROMPT_PII_HINTS", False)  # F9: the model no longer sees the regex verdict
+    assert "PII Detection" not in prompt() and "Severity: high" not in prompt()
+    assert "## Content Safety Results" in prompt()
+    monkeypatch.setattr(settings, "PROMPT_FAIL_CLOSED", True)
+    assert "## Decision Rule" in prompt() and "assign Confidential" in prompt()
+    monkeypatch.setattr(settings, "PROMPT_WIDE_HS", True)
+    assert "child-protection or safeguarding" in prompt()
+
+
+def test_pdf_structured_sends_pdf_and_schema_and_checks_quotes(monkeypatch):
+    clf = pdf_classifier(monkeypatch, "pdf_structured")
+    cite = {"page_number": 1, "evidence_type": "text", "relevance": "y"}
+    seen = fake_api(clf, {**REPLY, "sensitivity": "confidential", "citations": [
+        {**cite, "evidence_text": "memo about  STAFFING"}, {**cite, "evidence_text": "not on the page"},
+        {**cite, "evidence_type": "image", "evidence_text": "label at the top centre of the drawing"}]})
+    r = clf.classify_document(str(TC3), use_dual_verification=False)
+    document, text = seen[0]["messages"][0]["content"]
+    assert len(seen) == 1 and document["source"]["media_type"] == "application/pdf" and "citations" not in document
+    assert "attached as a PDF" in text["text"] and "Internal memo about staffing" not in text["text"]
+    schema = seen[0]["output_config"]["format"]["schema"]
+    assert seen[0]["output_config"]["format"]["type"] == "json_schema" and "citations" in schema["required"]
+    assert (r["status"], r["sensitivity"]) == ("completed", "Confidential")  # enum casing is not guaranteed
+    assert [c.get("verified") for c in r["citations"]] == [True, False, None]  # an image region is not checkable
+
+
+def test_pdf_citations_parses_lines_and_api_citations(monkeypatch):
+    clf = pdf_classifier(monkeypatch, "pdf_citations")
+    seen = fake_api(clf, [
+        cited("sensitivity: Confidential\nunsafe: true\nconfidence: 0.8\nsummary: s\nreasoning: r\nevidence: "),
+        cited("the memo is internal", page=1, quote="Internal memo about staffing."),
+        cited("\nevidence: a drawing on page 2 shows a schematic")])
+    r = clf.classify_document(str(TC3), use_dual_verification=False)
+    document = seen[0]["messages"][0]["content"][0]
+    assert document["citations"] == {"enabled": True} and "output_config" not in seen[0]  # the API rejects both
+    assert (r["sensitivity"], r["unsafe"], r["confidence"]) == ("Confidential", True, 0.8)
+    api, uncited = r["citations"]
+    assert (api["page_number"], api["evidence_text"], api["source"], api["verified"]) == (
+        1, "Internal memo about staffing.", "api", True)
+    assert (uncited["page_number"], uncited["evidence_type"]) == (None, "uncited")
+
+
+def test_pdf_citations_fails_without_a_sensitivity_line(monkeypatch):
+    clf = pdf_classifier(monkeypatch, "pdf_citations")
+    fake_api(clf, [cited("unsafe: false\nconfidence: 0.9")])
+    assert clf.classify_document(str(TC3), use_dual_verification=False)["status"] == "failed"
+
+
+def test_pdf_two_call_labels_then_cites(monkeypatch):
+    clf = pdf_classifier(monkeypatch, "pdf_two_call")
+    label = {k: REPLY[k] for k in ("sensitivity", "unsafe", "confidence", "summary", "reasoning")}
+    seen = fake_api(clf, label, [cited("evidence: "), cited("internal", page=1, quote="Internal memo")])
+    r = clf.classify_document(str(TC3), use_dual_verification=False)
+    (doc1, _), (doc2, text2) = (kw["messages"][0]["content"] for kw in seen)
+    assert "output_config" in seen[0] and "citations" not in doc1 and "cache_control" in doc1
+    assert "citations" not in seen[0]["output_config"]["format"]["schema"]["properties"]
+    assert "output_config" not in seen[1] and doc2["citations"] == {"enabled": True} and "cache_control" in doc2
+    assert "sensitivity = Confidential, unsafe = True" in text2["text"]
+    assert (r["sensitivity"], r["unsafe"]) == ("Confidential", True)
+    assert [(c["page_number"], c["source"]) for c in r["citations"]] == [(1, "api")]
+
+
+def test_pdf_shapes_apply_to_pdf_files_only(monkeypatch):
+    clf = pdf_classifier(monkeypatch, "pdf_structured")
+    seen = fake_api(clf, REPLY)
+    assert clf.classify_document("scan.png", use_dual_verification=False)["status"] == "completed"
+    assert isinstance(seen[0]["messages"][0]["content"], str) and "output_config" not in seen[0]
+
+
+@pytest.mark.parametrize("stop", ["refusal", "max_tokens"])
+def test_classifier_fails_on_refusal_or_truncation(stop):
+    clf = DocumentClassifier()
+    fake_doc(clf, "text")
+    fake_api(clf, REPLY, stop=stop)
+    r = clf.classify_document("x.pdf", use_dual_verification=False)
+    assert r["status"] == "failed" and stop in r["error"]
 
 
 # ---------------------------------------------------------------- API

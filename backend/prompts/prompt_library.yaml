@@ -63,6 +63,27 @@ categories:
 # Unsafe flag: independent of sensitivity. Verbatim from the challenge docx ("Unsafe Content" line).
 unsafe_definition: "Unsafe Content: In any case all content should be evaluated for Child Safety and should not include Hate speech, exploitative, violent, criminal, political news or cyber-threat content."
 
+# Phase 3 candidates (docs/FEATURES.md); each is added to the prompt only when its setting is on.
+
+# PROMPT_WIDE_HS. User decisions 2026-11-13 on FAILURES.md F2 and F16. The last sentence is the docx
+# Confidential line "customer details (names, addresses)".
+highly_sensitive_extension: >-
+  Highly Sensitive also covers a detailed personal record about a private individual: a completed
+  application or personnel file (identity and contact details together with employment or background
+  history), and any record that identifies a minor in a child-protection or safeguarding matter.
+  Names and addresses on their own, such as a customer list, remain Confidential.
+
+# PROMPT_FAIL_CLOSED. Worded from the docx category lines only.
+fail_closed_rule: |
+  Decide the sensitivity level in this order:
+  1. If any Highly Sensitive indicator is present, the level is Highly Sensitive.
+  2. Assign Public only when the document itself shows that it was produced for release to the general
+     public: marketing materials, product brochures, public website content, generic images.
+  3. In every other case assign Confidential. Internal communications, business documents, customer
+     details and non-public operational content are Confidential even when they hold no personal data.
+  A wrong Public label is the most costly error. The absence of PII is not evidence that a document is
+  Public. If you cannot tell whether a document was produced for public release, assign Confidential.
+
 # Classification Prompts
 classification_prompts:
   initial_analysis: |

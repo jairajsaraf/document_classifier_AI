@@ -1,0 +1,16 @@
+{
+ "model": "claude-haiku-5-5",
+ "sdk": "1.17.0",
+ "python": "3.12.16",
+ "pdf_set_hash": "54515af65bd01e66",
+ "dual_verification": false,
+ "runs": 3,
+ "arm": {
+  "input_mode": "pdf_structured",
+  "pii_hints": true,
+  "fail_closed": false,
+  "wide_hs": false,
+  "max_tokens": 8192
+ },
+ "started": "2026-11-14 01:42:14"
+}

@@ -1,0 +1,214 @@
+{
+ "method": "count_tokens",
+ "arm": {
+  "input_mode": "text",
+  "pii_hints": true,
+  "fail_closed": false,
+  "wide_hs": false,
+  "max_tokens": 4096
+ },
+ "docs": [
+  {
+   "doc_id": "TC1",
+   "calls": 1,
+   "in": 7041,
+   "input_cost": 0.0007041,
+   "longest": 7041
+  },
+  {
+   "doc_id": "TC2",
+   "calls": 1,
+   "in": 4598,
+   "input_cost": 0.00045980000000000006,
+   "longest": 4598
+  },
+  {
+   "doc_id": "TC3",
+   "calls": 1,
+   "in": 3910,
+   "input_cost": 0.000391,
+   "longest": 3910
+  },
+  {
+   "doc_id": "TC4",
+   "calls": 1,
+   "in": 16602,
+   "input_cost": 0.0016602000000000001,
+   "longest": 16602
+  },
+  {
+   "doc_id": "SYN01",
+   "calls": 1,
+   "in": 1078,
+   "input_cost": 0.0001078,
+   "longest": 1078
+  },
+  {
+   "doc_id": "SYN02",
+   "calls": 1,
+   "in": 978,
+   "input_cost": 9.78e-05,
+   "longest": 978
+  },
+  {
+   "doc_id": "SYN03",
+   "calls": 1,
+   "in": 975,
+   "input_cost": 9.750000000000001e-05,
+   "longest": 975
+  },
+  {
+   "doc_id": "SYN04",
+   "calls": 1,
+   "in": 992,
+   "input_cost": 9.920000000000001e-05,
+   "longest": 992
+  },
+  {
+   "doc_id": "SYN05",
+   "calls": 1,
+   "in": 948,
+   "input_cost": 9.480000000000001e-05,
+   "longest": 948
+  },
+  {
+   "doc_id": "SYN06",
+   "calls": 1,
+   "in": 1028,
+   "input_cost": 0.0001028,
+   "longest": 1028
+  },
+  {
+   "doc_id": "SYN07",
+   "calls": 1,
+   "in": 939,
+   "input_cost": 9.39e-05,
+   "longest": 939
+  },
+  {
+   "doc_id": "SYN08",
+   "calls": 1,
+   "in": 1029,
+   "input_cost": 0.00010290000000000001,
+   "longest": 1029
+  },
+  {
+   "doc_id": "SYN09",
+   "calls": 1,
+   "in": 1018,
+   "input_cost": 0.00010180000000000001,
+   "longest": 1018
+  },
+  {
+   "doc_id": "SYN10",
+   "calls": 1,
+   "in": 993,
+   "input_cost": 9.930000000000001e-05,
+   "longest": 993
+  },
+  {
+   "doc_id": "SYN11",
+   "calls": 1,
+   "in": 1117,
+   "input_cost": 0.0001117,
+   "longest": 1117
+  },
+  {
+   "doc_id": "SYN12",
+   "calls": 1,
+   "in": 990,
+   "input_cost": 9.900000000000001e-05,
+   "longest": 990
+  },
+  {
+   "doc_id": "SYN13",
+   "calls": 1,
+   "in": 945,
+   "input_cost": 9.45e-05,
+   "longest": 945
+  },
+  {
+   "doc_id": "SYN14",
+   "calls": 1,
+   "in": 920,
+   "input_cost": 9.200000000000001e-05,
+   "longest": 920
+  },
+  {
+   "doc_id": "SYN15",
+   "calls": 1,
+   "in": 973,
+   "input_cost": 9.730000000000001e-05,
+   "longest": 973
+  },
+  {
+   "doc_id": "SYN16",
+   "calls": 1,
+   "in": 936,
+   "input_cost": 9.360000000000001e-05,
+   "longest": 936
+  },
+  {
+   "doc_id": "SYN17",
+   "calls": 1,
+   "in": 887,
+   "input_cost": 8.87e-05,
+   "longest": 887
+  },
+  {
+   "doc_id": "SYN18",
+   "calls": 1,
+   "in": 1466,
+   "input_cost": 0.0001466,
+   "longest": 1466
+  },
+  {
+   "doc_id": "SYN19",
+   "calls": 1,
+   "in": 923,
+   "input_cost": 9.230000000000001e-05,
+   "longest": 923
+  },
+  {
+   "doc_id": "SYN20",
+   "calls": 1,
+   "in": 998,
+   "input_cost": 9.980000000000001e-05,
+   "longest": 998
+  },
+  {
+   "doc_id": "SYN21",
+   "calls": 1,
+   "in": 939,
+   "input_cost": 9.39e-05,
+   "longest": 939
+  },
+  {
+   "doc_id": "SYN22",
+   "calls": 1,
+   "in": 972,
+   "input_cost": 9.72e-05,
+   "longest": 972
+  },
+  {
+   "doc_id": "SYN23",
+   "calls": 1,
+   "in": 1005,
+   "input_cost": 0.0001005,
+   "longest": 1005
+  },
+  {
+   "doc_id": "SYN24",
+   "calls": 1,
+   "in": 964,
+   "input_cost": 9.640000000000001e-05,
+   "longest": 964
+  }
+ ],
+ "runs": 3,
+ "cost": {
+  "low": 0.0420492,
+  "mid": 0.0798492,
+  "high": 0.1888812
+ }
+}

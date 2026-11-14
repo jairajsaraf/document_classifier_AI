@@ -80,18 +80,6 @@ def pred_unsafe(r):
     return r["unsafe"] is True if "unsafe" in r else r["category"] == "Unsafe"
 
 
-def _n(s):
-    return re.sub(r"\s+", " ", s or "").strip().casefold()
-
-
-def quote_on_page(quote, page_text):
-    """Every '...'-separated segment of the quote must appear on the page (whitespace/case-insensitive)."""
-    segs = [_n(s).strip("\"'“”‘’ ") for s in re.split(r"\.\.\.|…", quote or "")]
-    segs = [s for s in segs if s]
-    pt = _n(page_text)
-    return bool(segs) and all(s in pt for s in segs)
-
-
 # ---------------------------------------------------------------- classifier harness
 def build_classifier():
     os.chdir(ROOT)
@@ -104,6 +92,18 @@ def build_classifier():
     return settings, DocumentClassifier()
 
 
+def arm(settings):
+    """The Phase 3 switches this process runs with (docs/FEATURES.md); saved in meta.json."""
+    return {"input_mode": settings.LLM_INPUT_MODE, "pii_hints": settings.PROMPT_PII_HINTS,
+            "fail_closed": settings.PROMPT_FAIL_CLOSED, "wide_hs": settings.PROMPT_WIDE_HS,
+            "max_tokens": settings.MAX_TOKENS}
+
+
+def prompt_chars(kw):
+    c = kw["messages"][0]["content"]  # a string, or content blocks when the PDF itself is attached
+    return len(c) if isinstance(c, str) else sum(len(b.get("text", "")) for b in c)
+
+
 def instrument(clf, calls, last, create=None):
     """Record every Anthropic call and the processed document without touching classifier code."""
     if create is None:
@@ -114,7 +114,9 @@ def instrument(clf, calls, last, create=None):
             r = orig(**kw)
             u = r.usage
             calls.append({"seconds": time.perf_counter() - t, "in": u.input_tokens, "out": u.output_tokens,
-                          "stop": r.stop_reason, "prompt_chars": len(kw["messages"][0]["content"])})
+                          "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0,
+                          "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0,
+                          "stop": r.stop_reason, "prompt_chars": prompt_chars(kw)})
             return r
         clf.anthropic_client.messages.create = create
     else:
@@ -130,8 +132,11 @@ def instrument(clf, calls, last, create=None):
 def cost(calls):
     c = 0.0
     for k in calls:
-        ri, ro = RATE_LONG if k["in"] > 100_000 else RATE_SHORT
-        c += k["in"] * ri + k["out"] * ro
+        # `in` excludes cached tokens. claude-api skill, prompt caching: a 5-minute cache write is billed
+        # at 1.25x the input rate and a cache read at 0.1x.
+        cw, cr = k.get("cache_write", 0), k.get("cache_read", 0)
+        ri, ro = RATE_LONG if k["in"] + cw + cr > 100_000 else RATE_SHORT
+        c += (k["in"] + 1.25 * cw + 0.1 * cr) * ri + k["out"] * ro
     return c
 
 
@@ -141,15 +146,20 @@ def classify_one(clf, calls, last, row, run):
     t = time.perf_counter()
     r = clf.classify_document(str(ROOT / row["file"]), use_dual_verification=False)
     total = time.perf_counter() - t
+    from backend.services.classifier import quote_on_page  # the same check the classifier ships as `verified`
     pages = {p["page_number"]: p.get("text", "") for p in last.get("content", {}).get("pages", [])}
     cites = []
     for c in r.get("citations") or []:
         kind = c.get("evidence_type")
-        rec = {"kind": "code" if kind in ("pii", "safety_violation") else "llm", "page": c.get("page_number"),
-               "quote": (c.get("evidence_text") or "")[:200]}
-        if rec["kind"] == "llm":
+        # code = regex PII/safety context; image = a described page region; uncited = an evidence line the
+        # API attached no citation to. Only "llm" citations carry a quote that can be checked on the page.
+        rec = {"kind": "code" if kind in ("pii", "safety_violation") else kind if kind in ("image", "uncited")
+               else "llm", "page": c.get("page_number"), "quote": (c.get("evidence_text") or "")[:200],
+               "api": c.get("source") == "api"}
+        if rec["kind"] in ("llm", "image"):
             pg = c.get("page_number")
             rec["page_exists"] = isinstance(pg, int) and pg in pages
+        if rec["kind"] == "llm":
             rec["quote_found"] = rec["page_exists"] and quote_on_page(c.get("evidence_text"), pages[pg])
         cites.append(rec)
     pii = [{"type": d["type"], "norm": pii_norm(PII_MAP.get(d["type"], d["type"]), d["full_value"]),
@@ -179,39 +189,51 @@ def cmd_estimate(args):
     calls, last = [], {}
 
     def fake_create(**kw):
-        text = kw["messages"][0]["content"]
-        n = (counter.messages.count_tokens(model=kw["model"], messages=kw["messages"]).input_tokens
-             if counter else round(len(text) / 3.5))
-        calls.append({"seconds": 0, "in": n, "out": 0, "stop": "estimate", "prompt_chars": len(text)})
+        content = kw["messages"][0]["content"]
+        pdf = not isinstance(content, str)
+        if counter:  # the real request, minus max_tokens: schema and PDF pages are counted too
+            extra = {"output_config": kw["output_config"]} if "output_config" in kw else {}
+            msg = kw["messages"] if not pdf else [{"role": "user", "content": [  # cache markers are not counted
+                {k: v for k, v in b.items() if k != "cache_control"} for b in content]}]
+            n = counter.messages.count_tokens(model=kw["model"], messages=msg, **extra).input_tokens
+        else:  # inferred. PDF support docs: 1,500-3,000 text tokens a page, plus one image per page
+            n = round(prompt_chars(kw) / 3.5) + (4000 * last.get("content", {}).get("page_count", 0) if pdf else 0)
+        # assume no cache hit; a block marked cache_control is billed as a 1.25x cache write
+        write = pdf and any("cache_control" in b for b in content)
+        calls.append({"seconds": 0, "in": 0 if write else n, "cache_write": n if write else 0, "out": 0,
+                      "stop": "estimate", "prompt_chars": prompt_chars(kw)})
         body = json.dumps({"sensitivity": "Public", "unsafe": False, "confidence": 0.9, "summary": "",
                            "reasoning": "", "citations": []})
+        if pdf and "output_config" not in kw:  # a citations request is answered in "field: value" lines
+            body = "sensitivity: Public\nunsafe: false\nconfidence: 0.9\nsummary: s\nreasoning: r\nevidence: e"
         return SimpleNamespace(content=[SimpleNamespace(type="text", text=body)], stop_reason="end_turn",
                                usage=SimpleNamespace(input_tokens=n, output_tokens=0))
     instrument(clf, calls, last, create=fake_create)
     out = []
-    print(f"{'doc':7}{'prompt chars':>14}{'input tokens':>14}  note")
+    print(f"arm: {json.dumps(arm(settings))}")
+    print(f"{'doc':7}{'calls':>6}{'prompt chars':>14}{'input tokens':>14}")
     for row in rows:
         calls.clear()
         r = clf.classify_document(str(ROOT / row["file"]), use_dual_verification=False)
-        if calls:
-            print(f"{row['doc_id']:7}{calls[0]['prompt_chars']:>14}{calls[0]['in']:>14}")
-            out.append({"doc_id": row["doc_id"], "in": calls[0]["in"], "chars": calls[0]["prompt_chars"]})
-        else:  # every document reaches the LLM now that the safety short-circuit is gone
-            sys.exit(f"{row['doc_id']}: processing failed before the LLM call ({r.get('error')}); "
-                     "refusing to report a partial estimate")
-    tin = sum(o["in"] for o in out)
-    nruns = args.runs
-    ri, ro = RATE_SHORT
-    longest = max((o["in"] for o in out), default=0)
-    print(f"\ndocs scored: {len(rows)}; LLM calls per run: {sum(1 for o in out if o['in'])}; "
-          f"longest prompt: {longest} tokens; method: {'inferred chars/3.5' if args.offline else 'count_tokens (confirmed)'}")
+        if r.get("status") != "completed" or not calls:
+            sys.exit(f"{row['doc_id']}: the dry run failed ({r.get('error')}); refusing to report a partial estimate")
+        tokens = sum(k["in"] + k["cache_write"] for k in calls)
+        print(f"{row['doc_id']:7}{len(calls):>6}{sum(k['prompt_chars'] for k in calls):>14}{tokens:>14}")
+        out.append({"doc_id": row["doc_id"], "calls": len(calls), "in": tokens, "input_cost": cost(calls),
+                    "longest": max(k["in"] + k["cache_write"] for k in calls)})
+    tin, calls_n, nruns = sum(o["in"] for o in out), sum(o["calls"] for o in out), args.runs
+    in_cost = sum(o["input_cost"] for o in out)
+    print(f"\ndocs scored: {len(rows)}; LLM calls per run: {calls_n}; "
+          f"longest prompt: {max(o['longest'] for o in out)} tokens; "
+          f"method: {'inferred chars/3.5 (+4000/PDF page)' if args.offline else 'count_tokens (confirmed)'}")
     print(f"input tokens per run: {tin}; x{nruns} runs = {tin * nruns}")
+    costs = {k: nruns * (in_cost + calls_n * v * RATE_SHORT[1]) for k, v in OUT_TOKENS.items()}
     for k, v in OUT_TOKENS.items():
-        calls_n = sum(1 for o in out if o["in"]) * nruns
-        print(f"  output assumption {k:4} ({v} tok/call): ${tin * nruns * ri + calls_n * v * ro:.3f}")
+        print(f"  output assumption {k:4} ({v} tok/call): ${costs[k]:.3f}")
     RUNS.mkdir(parents=True, exist_ok=True)
     (RUNS / "estimate.json").write_text(json.dumps({"method": "offline" if args.offline else "count_tokens",
-                                                   "docs": out, "runs": nruns}, indent=1))
+                                                   "arm": arm(settings), "docs": out, "runs": nruns,
+                                                   "cost": costs}, indent=1))
 
 
 # ---------------------------------------------------------------- run (paid)
@@ -222,12 +244,14 @@ def cmd_run(args):
     if not settings.ANTHROPIC_API_KEY:
         sys.exit("no ANTHROPIC_API_KEY in the environment")
     import anthropic
-    rows = load_golden()
+    rows = [r for r in load_golden() if not args.only or r["doc_id"] in args.only.split(",")]
     calls, last = [], {}
+    # ride out rate limits: a failed classification is recorded as done and --resume does not retry it
+    clf.anthropic_client = clf.anthropic_client.with_options(max_retries=6)
     instrument(clf, calls, last)
     RUNS.mkdir(parents=True, exist_ok=True)
     meta = {"model": settings.PRIMARY_LLM_MODEL, "sdk": anthropic.__version__, "python": sys.version.split()[0],
-            "pdf_set_hash": pdf_set_hash(), "dual_verification": False, "runs": args.runs,
+            "pdf_set_hash": pdf_set_hash(), "dual_verification": False, "runs": args.runs, "arm": arm(settings),
             "started": time.strftime("%Y-%m-%d %H:%M:%S")}
     meta_path = RUNS / "meta.json"
     if list(RUNS.glob("run*.jsonl")) and not args.resume:
@@ -236,29 +260,50 @@ def cmd_run(args):
                  "interrupted run of the SAME code with --resume.")
     if args.resume and meta_path.exists():
         old = json.loads(meta_path.read_text())
-        diff = [k for k in ("model", "pdf_set_hash", "dual_verification", "runs") if old.get(k) != meta[k]]
+        diff = [k for k in ("model", "pdf_set_hash", "dual_verification", "runs", "arm") if old.get(k) != meta[k]]
         if diff:
             sys.exit(f"--resume refused: {diff} differ from {meta_path}")
     else:
         meta_path.write_text(json.dumps(meta, indent=1))
-    for run in range(1, args.runs + 1):
-        path = RUNS / f"run{run}.jsonl"
-        done = set()
-        if path.exists():  # resumable: never pay twice for a finished doc
-            done = {json.loads(line)["doc_id"] for line in path.read_text().splitlines() if line.strip()}
-        with open(path, "a", encoding="utf-8") as f:
-            for row in rows:
-                if row["doc_id"] in done:
-                    continue
-                rec = classify_one(clf, calls, last, row, run)
-                f.write(json.dumps(rec) + "\n")
-                f.flush()
-                print(f"run{run} {row['doc_id']:6} true={row['sensitivity']:17} pred={rec['category']:17} "
-                      f"{rec['status']:9} ${rec['cost']:.5f} {rec['total_seconds']:.1f}s")
+    for attempt in (1, 2):  # the second pass re-runs classifications that failed on an API outage
+        outages = 0
+        for run in range(1, args.runs + 1):
+            path = RUNS / f"run{run}.jsonl"
+            done = set()
+            if path.exists():  # resumable: never pay twice for a finished doc; an outage is not a result
+                recs = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+                keep = [r for r in recs if cause(r) != "api outage"]
+                if len(keep) != len(recs):
+                    path.write_text("".join(json.dumps(r) + "\n" for r in keep), encoding="utf-8")
+                done = {r["doc_id"] for r in keep}
+            with open(path, "a", encoding="utf-8") as f:
+                for row in rows:
+                    if row["doc_id"] in done:
+                        continue
+                    rec = classify_one(clf, calls, last, row, run)
+                    outages += cause(rec) == "api outage"
+                    f.write(json.dumps(rec) + "\n")
+                    f.flush()
+                    print(f"run{run} {row['doc_id']:6} true={row['sensitivity']:17} pred={rec['category']:17} "
+                          f"{rec['status']:9} ${rec['cost']:.5f} {rec['total_seconds']:.1f}s")
+        if not outages:
+            break
     print(cmd_report(argparse.Namespace(out=str(RUNS / "metrics.md"))))
 
 
 # ---------------------------------------------------------------- report
+def cause(rec):
+    """Why a classification failed. Refusals, truncations and parse failures are results of the request
+    shape; an API outage (rate limit, 5xx, network) is not, so `run` retries those."""
+    e = rec.get("error") or ""
+    if rec.get("status") != "failed":
+        return ""
+    if re.search(r"Error code: (429|5\d\d)|Connection error|timed out|overloaded", e, re.I):
+        return "api outage"
+    return ("refusal" if "stopped with refusal" in e else "truncation" if "stopped with max_tokens" in e
+            else "parse" if "no valid sensitivity" in e else "api error" if "Error code" in e else "other")
+
+
 def pct(a, b):
     return "n/a" if b == 0 else f"{100 * a / b:.0f}% ({a}/{b})"
 
@@ -331,23 +376,38 @@ def group_section(name, rows, recs):
              ", ".join(f"{d} {sorted(Counter(full[d]).items())}" for d in full if d not in stable)), ""]
     # citations
     llm = [c for r in rs for c in r["citations"] if c["kind"] == "llm"]
-    code = sum(1 for r in rs for c in r["citations"] if c["kind"] == "code")
+    kinds = Counter(c["kind"] for r in rs for c in r["citations"])
     docs_with_valid = sum(1 for r in rs if any(c.get("quote_found") for c in r["citations"] if c["kind"] == "llm"))
     comp = [r for r in rs if r["status"] == "completed"]
     L += ["Citation validity (LLM-produced citations only; code-generated PII/safety citations "
-          f"[{code}] carry redacted context and are not graded):", "",
+          f"[{kinds['code']}] carry redacted context and are not graded):", "",
           f"- LLM citations: {len(llm)}; cited page exists: {pct(sum(c['page_exists'] for c in llm), len(llm))}; "
           f"quote found on that page: {pct(sum(c['quote_found'] for c in llm), len(llm))}",
-          f"- Completed classifications with at least one valid citation: {pct(docs_with_valid, len(comp))}", ""]
+          f"- Completed classifications with at least one valid citation: {pct(docs_with_valid, len(comp))}"]
+    if kinds["image"] or kinds["uncited"] or any(c.get("api") for c in llm):
+        api = [c for c in llm if c.get("api")]
+        none = sum(1 for r in comp if not any(c["kind"] in ("llm", "image") for c in r["citations"]))
+        L += [f"- of which extracted by the Citations API (valid pointers by construction): {len(api)}; "
+              f"their quote also matches this pipeline's page text: {pct(sum(c['quote_found'] for c in api), len(api))}",
+              f"- image-region citations (described, not checkable): {kinds['image']}; "
+              f"evidence lines the API attached no citation to: {kinds['uncited']}",
+              f"- Completed classifications with no page citation at all: {pct(none, len(comp))}"]
+    L.append("")
     # cost / latency
+    calls = [k for r in rs for k in r["calls"]]
+    per = lambda f: statistics.mean([sum(f(k) for k in r["calls"]) for r in rs if r["calls"]] or [0])
     L += ["Cost and latency per classification (pooled; latency includes OCR in total, API only in api):", "",
           f"- cost: mean ${statistics.mean(r['cost'] for r in rs):.5f}, max ${max(r['cost'] for r in rs):.5f}, "
           f"total ${sum(r['cost'] for r in rs):.4f}",
           f"- total seconds: {pct_stats([r['total_seconds'] for r in rs])}",
           f"- API seconds: {pct_stats([r['api_seconds'] for r in rs if r['calls']])}",
-          f"- input tokens mean {statistics.mean([k['in'] for r in rs for k in r['calls']] or [0]):.0f}, "
-          f"output tokens mean {statistics.mean([k['out'] for r in rs for k in r['calls']] or [0]):.0f}",
-          f"- stop reasons: {dict(Counter(k['stop'] for r in rs for k in r['calls']))}", ""]
+          f"- input tokens mean {statistics.mean([k['in'] for k in calls] or [0]):.0f}, "
+          f"output tokens mean {statistics.mean([k['out'] for k in calls] or [0]):.0f}"]
+    if len(calls) != len(rs) or any(k.get("cache_write") or k.get("cache_read") for k in calls):
+        L.append(f"- per classification: {len(calls) / len(rs):.2f} API calls; tokens mean: uncached input "
+                 f"{per(lambda k: k['in']):.0f}, cache write {per(lambda k: k.get('cache_write', 0)):.0f}, "
+                 f"cache read {per(lambda k: k.get('cache_read', 0)):.0f}, output {per(lambda k: k['out']):.0f}")
+    L += [f"- stop reasons: {dict(Counter(k['stop'] for k in calls))}", ""]
     return "\n".join(L)
 
 
@@ -397,11 +457,26 @@ def cmd_report(args):
     body.append(group_section("Synthetic (24 docs)", [r for r in rows if r["source"] == "synthetic"], recs))
     body.append(pii_section(rows, recs))
     fails = [(r["doc_id"], r["run"], r["error"]) for r in recs if r["status"] != "completed" and r["category"] != "Unsafe"]
-    body.append("### Failures\n\n" + ("none\n" if not fails else "\n".join(f"- {d} run{n}: {e}" for d, n, e in fails)))
+    body.append("### Failures\n\n" + ("none\n" if not fails else
+                                      f"By cause: {dict(Counter(cause(r) for r in recs if cause(r)))}\n\n"
+                                      + "\n".join(f"- {d} run{n}: {e}" for d, n, e in fails)))
     text = "\n".join(body)
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
     return text
+
+
+def cmd_model_info(args):
+    """PLAN Phase 3: ask the Models API what the model supports (PDF input was 'unknown today')."""
+    settings, _ = build_classifier()
+    import anthropic
+    m = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY).models.retrieve(MODEL)
+    info = {"id": m.id, "max_input_tokens": m.max_input_tokens, "max_tokens": m.max_tokens,
+            "capabilities": m.capabilities}
+    text = json.dumps(info, indent=1, default=lambda o: o.model_dump() if hasattr(o, "model_dump") else str(o))
+    RUNS.mkdir(parents=True, exist_ok=True)
+    (RUNS / "models_api.json").write_text(text)
+    print(text)
 
 
 def cmd_compare(args):
@@ -434,6 +509,8 @@ if __name__ == "__main__":
     r = sub.add_parser("run"); r.add_argument("--runs", type=int, default=3); r.add_argument("--skip-regen", action="store_true")
     r.add_argument("--dir", help="output directory (default eval/runs; refuses if it already holds results)")
     r.add_argument("--resume", action="store_true", help="finish an interrupted run of the same code/setup")
+    r.add_argument("--only", help="comma-separated doc ids (smoke test of a request shape; not a full eval)")
+    sub.add_parser("model-info").add_argument("--dir")
     p = sub.add_parser("report"); p.add_argument("--out"); p.add_argument("--dir")
     c = sub.add_parser("compare"); c.add_argument("--base", default=str(RUNS)); c.add_argument("--dir")
     c.add_argument("--out")
@@ -443,4 +520,4 @@ if __name__ == "__main__":
     if a.cmd in ("report", "compare"):
         print({"report": cmd_report, "compare": cmd_compare}[a.cmd](a))
     else:
-        {"estimate": cmd_estimate, "run": cmd_run}[a.cmd](a)
+        {"estimate": cmd_estimate, "run": cmd_run, "model-info": cmd_model_info}[a.cmd](a)

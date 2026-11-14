@@ -1,480 +1,217 @@
-# AI-Powered Regulatory Document Classifier
+# Regulatory Document Classifier
 
-## TAMU Datathon 2025 Submission
-
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109-green.svg)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-### 🏆 Project Overview
+Live demo: https://document-classifier-5fn6.onrender.com. It runs on a free Render instance that sleeps after 15 idle minutes. The first request after a sleep took about 32 s, and the instance erases uploads and reviews when it sleeps. Do not upload real personal data.
 
-An enterprise-grade AI-powered assistant that dynamically analyzes multi-page, multi-modal documents to classify them into **Public**, **Confidential**, **Highly Sensitive**, or **Unsafe** categories. The system leverages dynamic prompt generation, dual-LLM verification, Human-in-the-Loop (HITL) feedback, and comprehensive citation-based evidence for audit compliance.
+Built for the TAMU Datathon 2025 document-classification challenge. It reads a PDF and returns two labels, each with its reasons and page citations:
 
----
+- **`sensitivity`**: Public, Confidential or Highly Sensitive
+- **`unsafe`**: yes or no (child safety, hate speech, exploitation, violence, criminal, political-news or cyber-threat content). It is independent of `sensitivity`.
 
-## 🎯 Key Features
+A reviewer then approves or overrides the label in a small web UI. The model is `claude-haiku-5-5`.
 
-### Core Capabilities
-- ✅ **Multi-modal Document Processing**: PDF, images (PNG, JPG, JPEG, TIFF)
-- ✅ **Dynamic Prompt Library**: Configurable YAML-based prompt system
-- ✅ **PII Detection**: SSNs, credit cards, account numbers with context validation
-- ✅ **Content Safety**: Child safety, hate speech, violence, cyber threats
-- ✅ **Dual-LLM Verification**: Cross-verification to reduce HITL needs
-- ✅ **Citation-Based Evidence**: Page-level references for audit compliance
-- ✅ **HITL Feedback Loop**: Expert review and continuous improvement
-- ✅ **Batch & Interactive Processing**: Multiple processing modes
-- ✅ **Audit Trail**: Complete action history for compliance
-
-### Classification Categories
-
-1. **Public**: Marketing materials, brochures, public website content
-2. **Confidential**: Internal documents, customer details, operational content
-3. **Highly Sensitive**: PII (SSNs, financial data), proprietary schematics
-4. **Unsafe**: Child safety violations, hate speech, violence, cyber threats
+Every number below comes from a recorded run. [`docs/FEATURES.md`](docs/FEATURES.md) and [`docs/VERIFY.md`](docs/VERIFY.md) explain each one and its caveats.
 
 ---
 
-## 🤖 Models Used
+## What it does
 
-### Primary Classification Model
-**Claude 3 Haiku** (`claude-3-haiku-20240307`)
-- **Speed**: < 2 seconds per document
-- **Cost**: $0.25/MTok input, $1.25/MTok output
-- **Accuracy**: Optimized for classification tasks
-- **Why**: Fast, cost-effective, excellent reasoning
+- The review queue (`/`) lists all documents, sortable and filterable, with an upload control and the evaluation figures.
+- The document view (`/document/?id=...`) shows the PDF on one side and the label, safety, confidence, reasons and citations on the other. Clicking a citation jumps to its page. A tick on a page chip means the quoted text was found in that page's extracted text. Approve or override posts feedback.
+- The API (Swagger at `/docs`) uploads, classifies, returns results and takes feedback.
+- The pipeline extracts text (PyPDF2, with OCR for pages that have none), runs regex PII and content-safety checks, makes one LLM call, attaches page citations, and flags a document for human review when confidence is below 0.7.
+- A second-model verification pass (`USE_DUAL_VERIFICATION`) exists but is off by default and was not evaluated.
 
-### Secondary Verification Model (Optional)
-**GPT-3.5 Turbo** (`gpt-3.5-turbo`)
-- **Purpose**: Cross-verification to reduce HITL
-- **Speed**: < 1 second per verification
-- **Cost**: Very affordable for verification
-- **Why**: Different model family for diverse perspectives
+### Labels
 
-### Performance Metrics
-- **Average Classification Time**: 3-5 seconds (including pre-processing)
-- **Accuracy**: 95%+ on test cases
-- **HITL Reduction**: 60-70% through dual verification
-- **Cost per Document**: < $0.02 average
+| `sensitivity` | Meaning |
+|---|---|
+| Public | Marketing material, brochures, public website content |
+| Confidential | Internal communications, business documents, customer details, non-public operations |
+| Highly Sensitive | SSNs, account or card numbers, proprietary schematics, a private individual's application or personnel file |
+
+Any Highly Sensitive trigger makes a document Highly Sensitive; otherwise any Confidential trigger makes it Confidential; otherwise it is Public (the shipped prompt only says Public on clear evidence). Definitions: `backend/prompts/prompt_library.yaml`.
 
 ---
 
-## 📋 Test Cases
+## Measured results
 
-The system is designed and tested against 5 comprehensive test cases:
+Model `claude-haiku-5-5`, shipped prompt (the `combo` arm), 3 runs each. Source: `eval/runs_phase3/combo/metrics.md`.
 
-| Test Case | Description | Expected Category | Key Validation |
-|-----------|-------------|-------------------|----------------|
-| **TC1** | Public marketing brochure | Public | No PII, public content |
-| **TC2** | Employment application with SSN | Highly Sensitive | PII detection, citations |
-| **TC3** | Internal memo (no PII) | Confidential | Internal-only content |
-| **TC4** | Stealth fighter image | Confidential | Proprietary equipment |
-| **TC5** | Mixed unsafe content | Unsafe + Confidential | Multiple violations |
+| Measure | Result |
+|---|---|
+| TC1-TC4 labelled correctly | 12/12 (3/12 with the previous prompt) |
+| Sensitive documents labelled Public (TC1-TC4) | 0% (0/9) (67% before) |
+| Synthetic set (24 documents, labels derived from the challenge text) | 63/72 correct; Highly Sensitive recall 27/27; Public recall 16/24 |
+| Quote found on the cited page | 31% on TC1-TC4, 71% on the synthetic set |
+| Cost per document | about $0.002 on TC1-TC4 (mean $0.00201), $0.00086 on the synthetic set |
+| Time per document | median 14.7 s on TC1-TC4 (including OCR), 6.7 s on the synthetic set |
 
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.9 or higher
-- Tesseract OCR (for image text extraction)
-- Poppler (for PDF to image conversion)
-
-### Installation
-
-1. **Clone the repository**
-```bash
-git clone <repository-url>
-cd TAMU-Datathon-2025
-```
-
-2. **Install system dependencies**
-
-**macOS**:
-```bash
-brew install tesseract poppler
-```
-
-**Ubuntu/Debian**:
-```bash
-sudo apt-get update
-sudo apt-get install tesseract-ocr poppler-utils
-```
-
-**Windows**:
-- Download Tesseract: https://github.com/UB-Mannheim/tesseract/wiki
-- Download Poppler: https://github.com/oschwartz10612/poppler-windows/releases
-
-3. **Install Python dependencies**
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-4. **Set up environment variables**
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your API keys:
-```env
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here  # Optional, for dual verification
-```
-
-5. **Initialize database**
-```bash
-python -c "from backend.database import init_db; init_db()"
-```
-
-6. **Run the API server**
-```bash
-# From project root
-python -m uvicorn backend.main:app --reload --port 8000
-```
-
-The API will be available at: http://localhost:8000
-
-### API Documentation
-Once running, visit:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+Citations point to a page, not to a region of the page. The challenge asks for the region of a serial number on TC4 and TC5, and this does not provide it.
 
 ---
 
-## 📚 Usage
+## Test cases
 
-### Upload and Classify a Document
+| Case | Document | Golden label (`eval/golden.csv`) | Notes |
+|---|---|---|---|
+| TC1 | Public marketing brochure | Public, safe | |
+| TC2 | Filled-in employment application | Highly Sensitive, safe | |
+| TC3 | Internal memo | Confidential, safe | |
+| TC4 | Aviation flight-operations manual template | Confidential, safe | "Confidential (policy-based)" in the challenge text |
+| TC5 | Screen capture of a Word web editor | not scored | The PDF does not match its challenge description, and the live seed leaves it out because it shows an account name |
+
+The PDFs are in `HitachiDS_Datathon_Challenges_Package/`.
+
+---
+
+## Run it
+
+### Docker (the deployed image)
 
 ```bash
-curl -X POST "http://localhost:8000/api/documents/upload" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@/path/to/document.pdf"
+docker build -t docclf .
+docker run --rm -p 8000:8000 -e ANTHROPIC_API_KEY=your_key docclf
 ```
 
-Response:
-```json
-{
-  "document_id": 1,
-  "filename": "document.pdf",
-  "status": "uploaded",
-  "message": "Document uploaded successfully. Classification started."
-}
-```
+Open http://localhost:8000. The image builds the UI with Node 24, installs tesseract, poppler and libmagic, and seeds TC1-TC4 on first start.
 
-### Get Classification Results
+### Without Docker
+
+You need Python 3.12, Tesseract and Poppler on the PATH (`brew install tesseract poppler`, `apt-get install tesseract-ocr poppler-utils libmagic1`, or the Windows builds), and Node 22.13 or newer for the UI.
 
 ```bash
-curl -X GET "http://localhost:8000/api/documents/1"
+pip install -r backend/requirements.txt
+cp .env.example .env            # add ANTHROPIC_API_KEY
+(cd frontend && npm ci && npm run build)   # serves the UI at /; skip for API only
+python -m uvicorn backend.main:app --port 8000
 ```
 
-Response:
-```json
-{
-  "document": {
-    "id": 1,
-    "filename": "document.pdf",
-    "status": "completed",
-    "page_count": 5,
-    "image_count": 3,
-    "is_legible": true
-  },
-  "classification": {
-    "category": "Highly Sensitive",
-    "confidence": 0.95,
-    "summary": "Employment application containing PII",
-    "reasoning": "Document contains SSN and personal information...",
-    "pii_detected": true,
-    "content_safe": true
-  },
-  "citations": [
-    {
-      "page_number": 1,
-      "evidence_type": "pii",
-      "evidence_text": "SSN: ***-**-1234",
-      "description": "PII detected: Social Security Number"
-    }
-  ]
-}
-```
+On start, the app adds the `public_id` column to a SQLite file made by an older version.
 
-### Submit HITL Feedback
+---
+
+## API
+
+Every document id is an unguessable 32-character hex string.
 
 ```bash
-curl -X POST "http://localhost:8000/api/feedback" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "document_id": 1,
-    "feedback_type": "correction",
-    "reviewer_name": "John Doe",
-    "corrected_category": "Confidential",
-    "comments": "SSN is redacted, should be Confidential not Highly Sensitive"
-  }'
+# 1. upload (returns document_id; nothing is classified yet)
+curl -F "file=@document.pdf" http://localhost:8000/api/documents/upload
+
+# 2. classify once (a second call returns 409)
+curl -X POST http://localhost:8000/api/documents/<document_id>/classify
+
+# 3. read the result
+curl http://localhost:8000/api/documents/<document_id>
+
+# 4. review: approve ("confirmation") or override ("correction"); query parameters
+curl -X POST "http://localhost:8000/api/feedback?document_id=<document_id>&feedback_type=correction&reviewer_name=me&corrected_category=Confidential&corrected_unsafe=false&comments=why"
+```
+
+Classify returns `sensitivity`, `unsafe`, `confidence`, `summary`, `requires_review` and the document metadata. The document read returns the reviewed values plus `citations` (`page_number`, `evidence_type`, `evidence_text`, `description`, `verified`). `GET /api/documents` lists the queue, `GET /api/documents/<id>/file` returns the stored PDF, `GET /api` names the model, `GET /health` is the health check.
+
+---
+
+## Layout
+
+```
+backend/
+  main.py            FastAPI app: API routes, serves frontend/out at /
+  guard.py           upload quotas, page cap, filename clean-up
+  seed.py            loads backend/seed_data.json on first start (also exports it)
+  config.py          settings (environment variables)
+  models/ database/  SQLAlchemy models and setup
+  services/          document_processor, pii_detector, content_safety, classifier, prompt_manager
+  prompts/           prompt_library.yaml
+frontend/            Next.js static export: review queue and document view
+eval/                golden labels, eval runner, recorded runs (see eval/README.md)
+e2e/                 Playwright spec for a deployed URL
+docs/                FAILURES, FEATURES, UI_LIB, UI_BUILD, VERIFY, ARCHITECTURE
+test_system.py       pytest suite (the Anthropic call is faked)
+Dockerfile           Node 24 UI stage + Python image
+render.yaml          Render Blueprint (free plan)
 ```
 
 ---
 
-## 🏗️ Project Structure
+## Configuration
 
-```
-TAMU-Datathon-2025/
-├── backend/
-│   ├── api/              # API route handlers
-│   ├── models/           # Database models
-│   │   ├── document.py
-│   │   ├── classification.py
-│   │   ├── feedback.py
-│   │   └── audit.py
-│   ├── services/         # Core business logic
-│   │   ├── document_processor.py    # Document parsing & OCR
-│   │   ├── pii_detector.py          # PII detection
-│   │   ├── content_safety.py        # Safety monitoring
-│   │   ├── classifier.py            # LLM classification
-│   │   └── prompt_manager.py        # Dynamic prompts
-│   ├── prompts/          # Prompt library (YAML)
-│   ├── database/         # Database setup
-│   ├── config.py         # Configuration
-│   ├── main.py           # FastAPI application
-│   └── requirements.txt  # Python dependencies
-├── frontend/             # Future: React UI
-├── docs/                 # Documentation
-│   └── ARCHITECTURE.md   # System architecture
-├── tests/                # Test suites
-├── test_data/            # Sample test documents
-├── .env.example          # Environment template
-├── .gitignore
-└── README.md
-```
+Settings are environment variables (defaults in `backend/config.py`); `.env.example` lists the common ones.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | none | required to classify |
+| `PRIMARY_LLM_MODEL` | `claude-haiku-5-5` | |
+| `USE_DUAL_VERIFICATION` | `False` | needs `OPENAI_API_KEY`; not evaluated |
+| `LLM_INPUT_MODE` | `text` | `pdf_*` modes exist but did not pass the ship gate (`docs/FEATURES.md`) |
+| `LOW_CONFIDENCE_THRESHOLD` | `0.7` | below this a document is flagged for review |
+| `MAX_FILE_SIZE_MB`, `MAX_PDF_PAGES`, `MAX_STORED_MB` | 10, 25, 200 | upload caps |
+| `UPLOADS_PER_IP_PER_HOUR`, `UPLOADS_PER_DAY` | 5, 100 | upload quotas, counted in memory |
+| `CLIENT_IP_HEADER` | empty | set to `cf-connecting-ip` behind Cloudflare (Render) |
+| `SEED_ON_BOOT` | `True` | load the TC1-TC4 results into an empty database |
+| `DATABASE_URL`, `UPLOAD_DIR` | SQLite file, `uploads` | |
+
+Lists such as `ALLOWED_EXTENSIONS` are JSON when set in the environment: `ALLOWED_EXTENSIONS=["pdf"]`.
 
 ---
 
-## 🔬 How It Works
+## Tests
 
-### Processing Pipeline
-
-1. **Document Upload & Pre-processing**
-   - Validate file type and size
-   - Extract text from PDF/images using OCR
-   - Calculate legibility score
-   - Count pages and images
-
-2. **PII Detection**
-   - Pattern matching for SSNs, credit cards, account numbers
-   - Context-aware validation (Luhn algorithm for credit cards)
-   - Confidence scoring
-
-3. **Content Safety Check**
-   - Multi-category scanning (child safety, hate speech, violence, etc.)
-   - Keyword and pattern matching
-   - Context analysis to reduce false positives
-
-4. **Primary Classification (Claude Haiku)**
-   - Dynamic prompt generation from YAML library
-   - Inject PII and safety results as context
-   - Extract category, confidence, reasoning, and citations
-
-5. **Dual Verification (GPT-3.5 - Optional)**
-   - Independent classification by second model
-   - Calculate agreement score
-   - Resolve conflicts or trigger HITL
-
-6. **Citation Generation**
-   - Page-level evidence from LLM
-   - PII detection citations
-   - Safety violation citations
-   - Evidence linking
-
-7. **HITL Decision**
-   - Check confidence threshold (< 0.70)
-   - Evaluate trigger conditions
-   - Queue for expert review if needed
-
-8. **Store & Return Results**
-   - Save to database
-   - Generate audit log
-   - Return structured response
-
-### Dynamic Prompt System
-
-Prompts are defined in `backend/prompts/prompt_library.yaml`:
-- Category definitions with keywords
-- Stage-based prompts (initial analysis, PII detection, final classification)
-- Citation templates
-- HITL trigger rules
-- Dual verification prompts
-
----
-
-## 📊 Evaluation Criteria Compliance
-
-### 1. Classification Accuracy (50%)
-✅ High precision/recall on test cases
-✅ Clear category mapping
-✅ Page/region citations for evidence
-
-### 2. Reducing HITL Involvement (20%)
-✅ Confidence scoring (0-1 scale)
-✅ Dual-LLM consensus mechanism
-✅ Clear reviewer queue
-✅ 60-70% reduction in manual review
-
-### 3. Processing Speed (10%)
-✅ Lightweight model (Claude Haiku)
-✅ 3-5 seconds average per document
-✅ Cost-effective (< $0.02 per document)
-
-### 4. User Experience & UI (10%)
-✅ RESTful API with clear responses
-✅ Structured JSON outputs
-✅ Evidence citations
-✅ Audit-ready reports
-
-### 5. Content Safety Evaluation (10%)
-✅ Multi-category safety checks
-✅ Child safety validation
-✅ Hate speech detection
-✅ Violence and cyber threat monitoring
-
----
-
-## 🛠️ Configuration
-
-### Environment Variables
-
-```env
-# API Keys
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-
-# Application
-ENVIRONMENT=development
-DEBUG=True
-LOG_LEVEL=INFO
-
-# LLM Configuration
-PRIMARY_LLM_MODEL=claude-3-haiku-20240307
-SECONDARY_LLM_MODEL=gpt-3.5-turbo
-USE_DUAL_VERIFICATION=True
-CONFIDENCE_THRESHOLD=0.85
-
-# Document Processing
-MAX_FILE_SIZE_MB=50
-ALLOWED_EXTENSIONS=pdf,png,jpg,jpeg,tiff
-
-# Content Safety
-ENABLE_CONTENT_SAFETY=True
-SAFETY_THRESHOLD=0.7
-
-# HITL
-ENABLE_HITL=True
-LOW_CONFIDENCE_THRESHOLD=0.7
-```
-
-### Prompt Library
-
-Edit `backend/prompts/prompt_library.yaml` to:
-- Add new categories
-- Modify classification prompts
-- Adjust HITL triggers
-- Update citation requirements
-
----
-
-## 🧪 Testing
-
-### Run Tests
 ```bash
-# Backend tests
-cd backend
-pytest tests/ -v
+# unit and API tests (needs tesseract, poppler, libmagic: easiest inside the image)
+docker run --rm -v "$PWD":/app -w /app docclf python -m pytest -q test_system.py
+
+# paid eval against the golden labels (subcommands: estimate, run; see eval/README.md)
+python eval/run_eval.py --help
+
+# deployed service
+cd e2e && npm ci && BASE_URL=https://your-service E2E_UPLOAD=1 npx playwright test
 ```
 
-### Test with Sample Documents
-```bash
-# Upload a test document
-curl -X POST "http://localhost:8000/api/documents/upload" \
-  -F "file=@test_data/sample_employment_form.pdf"
-
-# Classify immediately
-curl -X POST "http://localhost:8000/api/documents/1/classify"
-
-# Get results
-curl -X GET "http://localhost:8000/api/documents/1"
-```
+`E2E_UPLOAD=1` uploads TC1-TC4 through the UI, which spends API calls and uses the per-IP quota.
 
 ---
 
-## 📈 Performance Benchmarks
+## Limits and security
 
-| Metric | Value |
-|--------|-------|
-| Average Classification Time | 3-5 seconds |
-| Accuracy (Test Cases) | 95%+ |
-| PII Detection Precision | 90%+ |
-| Safety Check Recall | 98%+ |
-| Cost per Document | < $0.02 |
-| HITL Reduction | 60-70% |
+- Uploads are visible to every visitor until the instance sleeps. Random ids stop id-guessing, but the queue lists every document.
+- The server enforces per-IP and daily upload caps, size, page and storage caps, one classification per upload, and a generated name for every stored file. Display filenames are cleaned.
+- Counters live in memory and files on an ephemeral disk, so a restart clears uploads, reviews and quota counts. Seeded results return.
+- About 1 in 10 uploaded documents may fail to parse or come back without a ticked citation (a small sample, see `docs/VERIFY.md`).
+- There are no accounts. Feedback is recorded under a fixed reviewer name, and the API has no authentication.
+- Known defects and open items are in `docs/FAILURES.md` and the "Adjacent issues" section of `docs/VERIFY.md`.
 
 ---
 
-## 🔐 Security & Compliance
+## Deployment
 
-- **Data Privacy**: PII redacted in logs and responses
-- **Audit Trail**: Complete action history stored
-- **Secure Storage**: Uploaded files in protected directory
-- **API Security**: Rate limiting and validation (future: API keys)
+The app runs as one free Render web service (Docker), defined in `render.yaml` (New > Blueprint). You type the API key into the dashboard, and deploys are manual. [`docs/VERIFY.md`](docs/VERIFY.md) records the verification results, the memory and event-loop defects found on the way, and the teach-back kit.
 
 ---
 
-## 🚧 Future Enhancements
+## Documentation
 
-- [ ] React/Next.js frontend UI
-- [ ] Batch upload (multiple files)
-- [ ] Real-time WebSocket updates
-- [ ] Advanced visualizations and dashboards
-- [ ] PDF report generation
-- [ ] Video content analysis
-- [ ] Multi-language support
-- [ ] Integration with document management systems
-- [ ] Advanced OCR (handwriting recognition)
-- [ ] Automated prompt optimization
+- [docs/VERIFY.md](docs/VERIFY.md): deployment, live test results, limits, teach-back kit
+- [docs/FEATURES.md](docs/FEATURES.md): the features tried, with deltas and ship verdicts
+- [docs/FAILURES.md](docs/FAILURES.md): defects found and fixed
+- [docs/UI_LIB.md](docs/UI_LIB.md), [docs/UI_BUILD.md](docs/UI_BUILD.md): UI library choice and build record
+- [eval/README.md](eval/README.md): golden labels and how the eval runs
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): system architecture (written early; where it disagrees with the above, the above is current)
 
 ---
 
-## 👥 Team
+## Team
 
 **TAMU Datathon 2025 - Team [Your Team Name]**
 
----
+## License
 
-## 📄 License
+MIT. No `LICENSE` file is committed yet.
 
-MIT License - see LICENSE file for details
+## Acknowledgments
 
----
-
-## 🙏 Acknowledgments
-
-- Anthropic for Claude API
-- OpenAI for GPT API
-- FastAPI framework
-- Open-source OCR tools (Tesseract, pdf2image)
-
----
-
-## 📞 Support
-
-For questions or issues:
-- Open an issue in the repository
-- Contact: [your-email@example.com]
-
----
-
-## 📖 Documentation
-
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [API Documentation](http://localhost:8000/docs) (when running)
-- [Prompt Library Configuration](backend/prompts/prompt_library.yaml)
-
----
-
-**Built with ❤️ for TAMU Datathon 2025**
+Anthropic for the Claude API; FastAPI; Tesseract and pdf2image; Next.js, shadcn, TanStack Table and react-pdf.

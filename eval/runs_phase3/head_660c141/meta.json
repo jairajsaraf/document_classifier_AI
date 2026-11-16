@@ -1,0 +1,18 @@
+{
+ "model": "claude-haiku-5-5",
+ "sdk": "1.17.0",
+ "python": "3.12.15",
+ "pdf_set_hash": "54515af65bd01e66",
+ "dual_verification": false,
+ "runs": 3,
+ "arm": {
+  "input_mode": "text",
+  "pii_hints": false,
+  "fail_closed": true,
+  "wide_hs": true,
+  "max_tokens": 4096
+ },
+ "commit": "660c141af9ebf1199d2707da48610456b65895b9",
+ "dirty": false,
+ "started": "2026-11-16 07:34:32"
+}

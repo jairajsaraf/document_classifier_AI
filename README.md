@@ -2,7 +2,6 @@
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109-green.svg)](https://fastapi.tiangolo.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Live demo: https://document-classifier-5fn6.onrender.com. It runs on a free Render instance that sleeps after 15 idle minutes. The first request after a sleep took about 32 s, and the instance erases uploads and reviews when it sleeps. Do not upload real personal data.
 
@@ -39,7 +38,7 @@ Any Highly Sensitive trigger makes a document Highly Sensitive; otherwise any Co
 
 ## Measured results
 
-Model `claude-haiku-5-5`, shipped prompt (the `combo` arm), 3 runs each. Source: `eval/runs_phase3/combo/metrics.md`.
+Model `claude-haiku-5-5`, shipped prompt (the `combo` arm), 3 runs each. Source: `eval/runs_phase3/combo/metrics.md`; the "previous prompt" figures come from `eval/runs_phase2`.
 
 | Measure | Result |
 |---|---|
@@ -47,8 +46,15 @@ Model `claude-haiku-5-5`, shipped prompt (the `combo` arm), 3 runs each. Source:
 | Sensitive documents labelled Public (TC1-TC4) | 0% (0/9) (67% before) |
 | Synthetic set (24 documents, labels derived from the challenge text) | 63/72 correct; Highly Sensitive recall 27/27; Public recall 16/24 |
 | Quote found on the cited page | 31% on TC1-TC4, 71% on the synthetic set |
+| At least one valid citation per classification | 92% (11/12) on TC1-TC4, 88% (63/72) on the synthetic set |
+| Unsafe recall, shipped output (synthetic set) | 71% (15/21), precision 100% (15/15) |
+| Unsafe recall, regex flag alone (synthetic set) | 14% (3/21) |
+| Regex PII detector (synthetic set, run 1) | recall 14% (4/29), precision 31% (4/13) |
+| Label stability (synthetic set) | 22/24 documents got the same category in all 3 runs; SYN05 and SYN10 did not |
 | Cost per document | about $0.002 on TC1-TC4 (mean $0.00201), $0.00086 on the synthetic set |
 | Time per document | median 14.7 s on TC1-TC4 (including OCR), 6.7 s on the synthetic set |
+
+Against the previous prompt, SYN05 and SYN22 got worse on `sensitivity` (`eval/runs_phase3/combo/compare.md`). SYN23 was relabelled Highly Sensitive in the same commit as these runs (`eval/golden.csv`, `eval/README.md`), so its label is a decision, not derived from the challenge text.
 
 Citations point to a page, not to a region of the page. The challenge asks for the region of a serial number on TC4 and TC5, and this does not provide it.
 
@@ -148,7 +154,6 @@ Settings are environment variables (defaults in `backend/config.py`); `.env.exam
 | `PRIMARY_LLM_MODEL` | `claude-haiku-5-5` | |
 | `USE_DUAL_VERIFICATION` | `False` | needs `OPENAI_API_KEY`; not evaluated |
 | `LLM_INPUT_MODE` | `text` | `pdf_*` modes exist but did not pass the ship gate (`docs/FEATURES.md`) |
-| `LOW_CONFIDENCE_THRESHOLD` | `0.7` | below this a document is flagged for review |
 | `MAX_FILE_SIZE_MB`, `MAX_PDF_PAGES`, `MAX_STORED_MB` | 10, 25, 200 | upload caps |
 | `UPLOADS_PER_IP_PER_HOUR`, `UPLOADS_PER_DAY` | 5, 100 | upload quotas, counted in memory |
 | `CLIENT_IP_HEADER` | empty | set to `cf-connecting-ip` behind Cloudflare (Render) |
@@ -181,7 +186,7 @@ cd e2e && npm ci && BASE_URL=https://your-service E2E_UPLOAD=1 npx playwright te
 - Uploads are visible to every visitor until the instance sleeps. Random ids stop id-guessing, but the queue lists every document.
 - The server enforces per-IP and daily upload caps, size, page and storage caps, one classification per upload, and a generated name for every stored file. Display filenames are cleaned.
 - Counters live in memory and files on an ephemeral disk, so a restart clears uploads, reviews and quota counts. Seeded results return.
-- About 1 in 10 uploaded documents may fail to parse or come back without a ticked citation (a small sample, see `docs/VERIFY.md`).
+- In the live check, 2 of 9 uploads had a problem: one failed to parse and one came back without a ticked citation (both TC2). That is a small sample (`docs/VERIFY.md`).
 - There are no accounts. Feedback is recorded under a fixed reviewer name, and the API has no authentication.
 - Known defects and open items are in `docs/FAILURES.md` and the "Adjacent issues" section of `docs/VERIFY.md`.
 
@@ -208,9 +213,9 @@ The app runs as one free Render web service (Docker), defined in `render.yaml` (
 
 **TAMU Datathon 2025 - Team VibeTribe**
 
-## License
+## Fork and keys
 
-MIT. No `LICENSE` file is committed yet.
+This repository is a fork of `Tirth-1999/TAMU-Datathon-2025`. The 2025 API keys that were committed in `.env.example` were rotated (the owner's statement, not checked here) and replaced with placeholders in commit `72c9003`. Older commits still contain the old text.
 
 ## Acknowledgments
 

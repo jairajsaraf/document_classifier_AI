@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # the default `bash -e {0}` has no pipefail
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false # nothing here needs git auth
+
+      - name: Build image
+        run: docker build -t docclf .
+
+      # No API key: the suite fakes the Anthropic call.
+      - name: Tests
+        run: docker run --rm -v "$PWD":/app -w /app docclf python -m pytest -q test_system.py
+
+      # `report` prints with print(), which appends one "\n" after the report's own
+      # trailing "\n". metrics.md has a single one. A raw diff on Linux differs only by
+      # that extra blank line (no CRs), so only it is normalised: $(...) strips trailing
+      # newlines and printf puts back exactly one.
+      - name: Report matches committed metrics.md
+        run: |
+          docker run --rm -v "$PWD":/app -w /app docclf sh -c '
+            python eval/run_eval.py report --dir eval/runs_phase3/combo > /tmp/report.md &&
+            printf "%s\n" "$(cat /tmp/report.md)" | diff - eval/runs_phase3/combo/metrics.md'

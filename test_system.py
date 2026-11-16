@@ -96,19 +96,19 @@ def test_pii_detects_ssn_and_email():
     assert "912-45-6789" not in ssn["context"]  # a detection's own value is redacted in its context
 
 
-@pytest.mark.xfail(strict=True, reason="FAILURES.md F10: context keeps OTHER PII values unredacted")
+@pytest.mark.xfail(strict=True, reason="FAILURES.md F12: context keeps OTHER PII values unredacted")
 def test_pii_context_redacts_neighbouring_pii():
     r = PIIDetector().detect_pii("SSN: 912-45-6789\nEmail: john.doe@example.com\n", page_number=1)
     assert all("912-45-6789" not in d["context"] for d in r["detections"])
 
 
-@pytest.mark.xfail(strict=True, reason="FAILURES.md F8: card regex needs contiguous digits")
+@pytest.mark.xfail(strict=True, reason="FAILURES.md F10: card regex needs contiguous digits")
 def test_pii_detects_spaced_card_number():
     r = PIIDetector().detect_pii("Card number: 4111 1111 1111 1111", page_number=1)
     assert "credit_card" in r["pii_types"]
 
 
-@pytest.mark.xfail(strict=True, reason="FAILURES.md F7: SSN-shaped order IDs are flagged as SSNs")
+@pytest.mark.xfail(strict=True, reason="FAILURES.md F9: SSN-shaped order IDs are flagged as SSNs")
 def test_pii_ignores_ssn_shaped_order_id():
     r = PIIDetector().detect_pii("Your order ID is 917-42-3086. Track it online.", page_number=1)
     assert "ssn" not in r["pii_types"]
@@ -121,7 +121,7 @@ def test_content_safety_flags_and_passes():
     assert not c.check_content_safety("Instructions for violent activities and exploitation.", 1)["is_safe"]
 
 
-@pytest.mark.xfail(strict=True, reason="FAILURES.md F9: keyword 'minor' raises a critical child_safety flag")
+@pytest.mark.xfail(strict=True, reason="FAILURES.md F11: keyword 'minor' raises a critical child_safety flag")
 def test_content_safety_ignores_minor_changes():
     assert ContentSafetyChecker().check_content_safety("We made minor changes to the schedule.", 1)["is_safe"]
 

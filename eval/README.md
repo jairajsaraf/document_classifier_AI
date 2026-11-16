@@ -4,7 +4,7 @@ This folder holds the golden labels for the five datathon test cases (TC1-TC5) a
 - `sensitivity`: Public, Confidential or Highly Sensitive
 - `unsafe`: yes or no
 
-Nothing here has been run against a model yet.
+Runs against a model exist: see `eval/runs*` (each folder has its own `metrics.md`).
 
 ## Files
 

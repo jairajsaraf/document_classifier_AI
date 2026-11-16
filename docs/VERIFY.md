@@ -101,7 +101,7 @@ About 9 live classifications ($0.002 each, **inferred** from `eval/runs_phase3/c
 5. No cap on simultaneous classifications; at 0.1 CPU two at once are untested.
 6. The queue says "Classified" for rows that are neither reviewed nor flagged; no seeded row needs review (TC4's confidence 0.72 is above the 0.7 threshold).
 7. `shadcn` still sits in `dependencies` (UI_BUILD.md, item 14).
-8. This file is not linked from the README.
+8. This file is linked from the README.
 
 ## Teach-back kit
 

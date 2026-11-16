@@ -237,6 +237,16 @@ def cmd_estimate(args):
 
 
 # ---------------------------------------------------------------- run (paid)
+def git_state():
+    """Return {"commit": <HEAD sha>, "dirty": <bool>}; both "unknown" when git or .git is unavailable."""
+    def git(*a):
+        return subprocess.check_output(["git", *a], cwd=ROOT, text=True, stderr=subprocess.DEVNULL)
+    try:
+        return {"commit": git("rev-parse", "HEAD").strip(), "dirty": bool(git("status", "--porcelain").strip())}
+    except (OSError, subprocess.CalledProcessError):  # no git binary, or no .git (the image excludes it)
+        return {"commit": "unknown", "dirty": "unknown"}
+
+
 def cmd_run(args):
     if not args.skip_regen:
         regenerate_pdfs()
@@ -252,7 +262,7 @@ def cmd_run(args):
     RUNS.mkdir(parents=True, exist_ok=True)
     meta = {"model": settings.PRIMARY_LLM_MODEL, "sdk": anthropic.__version__, "python": sys.version.split()[0],
             "pdf_set_hash": pdf_set_hash(), "dual_verification": False, "runs": args.runs, "arm": arm(settings),
-            "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+            **git_state(), "started": time.strftime("%Y-%m-%d %H:%M:%S")}
     meta_path = RUNS / "meta.json"
     if list(RUNS.glob("run*.jsonl")) and not args.resume:
         # never let saved results masquerade as a fresh evaluation after code or prompt changes

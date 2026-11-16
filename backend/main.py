@@ -81,7 +81,9 @@ async def api_root():
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "status": "running",
-        "model": settings.PRIMARY_LLM_MODEL
+        "model": settings.PRIMARY_LLM_MODEL,
+        # set by Render at runtime; absent locally
+        "commit": os.environ.get("RENDER_GIT_COMMIT", "unknown"),
     }
 
 @app.get("/health")

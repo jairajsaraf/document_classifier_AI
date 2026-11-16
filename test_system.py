@@ -382,6 +382,13 @@ def test_ui_endpoints_serve_file_verified_flag_and_model(client):
     assert client.get("/api").json()["model"] == settings.PRIMARY_LLM_MODEL
 
 
+def test_api_root_reports_commit(client, monkeypatch):
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
+    assert client.get("/api").json()["commit"] == "unknown"
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "abc123")
+    assert client.get("/api").json()["commit"] == "abc123"
+
+
 def test_document_list_pages_without_overlap(client):
     # PR #6 review: the queue reads every page, so skip/limit must not repeat or drop rows
     for i in range(3):

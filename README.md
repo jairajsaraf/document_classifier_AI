@@ -38,23 +38,23 @@ Any Highly Sensitive trigger makes a document Highly Sensitive; otherwise any Co
 
 ## Measured results
 
-Model `claude-haiku-5-5`, shipped prompt (the `combo` arm), 3 runs each. Source: `eval/runs_phase3/combo/metrics.md`; the "previous prompt" figures come from `eval/runs_phase2`.
+Model `claude-haiku-5-5`, shipped prompt (the `combo` arm), 3 runs each, run on 2026-11-16 at commit `660c141` with a clean tree (`meta.json` records both). Source: `eval/runs_phase3/head_660c141/metrics.md`; the "previous prompt" figures come from `eval/runs_phase2`.
 
 | Measure | Result |
 |---|---|
-| TC1-TC4 labelled correctly | 12/12 (3/12 with the previous prompt) |
+| TC1-TC4 labelled correctly | 11/12 (3/12 with the previous prompt); the twelfth, TC2 in run 3, returned no valid sensitivity (`Unknown`) |
 | Sensitive documents labelled Public (TC1-TC4) | 0% (0/9) (67% before) |
-| Synthetic set (24 documents, labels derived from the challenge text) | 63/72 correct; Highly Sensitive recall 27/27; Public recall 16/24 |
-| Quote found on the cited page | 31% on TC1-TC4, 71% on the synthetic set |
-| At least one valid citation per classification | 92% (11/12) on TC1-TC4, 88% (63/72) on the synthetic set |
-| Unsafe recall, shipped output (synthetic set) | 71% (15/21), precision 100% (15/15) |
+| Synthetic set (24 documents, labels derived from the challenge text) | 64/72 correct; Highly Sensitive recall 27/27; Public recall 16/24 |
+| Quote found on the cited page | 27% on TC1-TC4, 74% on the synthetic set |
+| At least one valid citation per completed classification | 91% (10/11) on TC1-TC4, 88% (63/72) on the synthetic set |
+| Unsafe recall, shipped output (synthetic set) | 100% (21/21), precision 100% (21/21) |
 | Unsafe recall, regex flag alone (synthetic set) | 14% (3/21) |
 | Regex PII detector (synthetic set, run 1) | recall 14% (4/29), precision 31% (4/13) |
-| Label stability (synthetic set) | 22/24 documents got the same category in all 3 runs; SYN05 and SYN10 did not |
-| Cost per document | about $0.002 on TC1-TC4 (mean $0.00201), $0.00086 on the synthetic set |
-| Time per document | median 14.7 s on TC1-TC4 (including OCR), 6.7 s on the synthetic set |
+| Label stability (synthetic set) | 23/24 documents got the same category in all 3 runs; SYN22 did not |
+| Cost per document | about $0.002 on TC1-TC4 (mean $0.00205), $0.00086 on the synthetic set |
+| Time per document | median 12.4 s on TC1-TC4 (including OCR), 6.5 s on the synthetic set |
 
-Against the previous prompt, SYN05 and SYN22 got worse on `sensitivity` (`eval/runs_phase3/combo/compare.md`). SYN23 was relabelled Highly Sensitive in the same commit as these runs (`eval/golden.csv`, `eval/README.md`), so its label is a decision, not derived from the challenge text.
+An earlier run of the same arm, committed in `b8db2e5` on 2026-11-13 without a recorded code version (`eval/runs_phase3/combo/metrics.md`), differs on six documents: TC2, SYN05, SYN10, SYN21, SYN22 and SYN23 (`eval/runs_phase3/head_660c141/compare.md`). It scored 12/12 on TC1-TC4 and 71% (15/21) unsafe recall. Why the two runs differ is not established, so read each figure as one 3-run sample. In that earlier run, SYN05 and SYN22 got worse on `sensitivity` against the previous prompt (`eval/runs_phase3/combo/compare.md`). SYN23 was relabelled Highly Sensitive in the same commit as the earlier run (`eval/golden.csv`, `eval/README.md`), so its label is a decision, not derived from the challenge text.
 
 Citations point to a page, not to a region of the page. The challenge asks for the region of a serial number on TC4 and TC5, and this does not provide it.
 

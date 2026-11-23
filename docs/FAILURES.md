@@ -10,8 +10,8 @@ Defects are ordered by measured eval impact first, then by risk. The table order
 
 | # | Defect | Measured impact | Risk | Status |
 |---|---|---|---|---|
-| F1 | TC3 and TC4 called Public | TC false-Public 67% (6/9), 3/3 runs each; unchanged after Phase 2 | High: false-Public is the costliest error | Fixed in Phase 3 (combo arm): TC 12/12 correct, false-Public 0/9 (`eval/runs_phase3/combo/metrics.md`) |
-| F2 | TC2 called Confidential | TC Highly Sensitive recall 0% (0/3); unchanged after Phase 2 | High | Fixed in Phase 3 (combo arm): TC 12/12 correct, false-Public 0/9 (`eval/runs_phase3/combo/metrics.md`) |
+| F1 | TC3 and TC4 called Public | TC false-Public 67% (6/9), 3/3 runs each; unchanged after Phase 2 | High: false-Public is the costliest error | Fixed in Phase 3 (combo arm): TC 12/12 correct, false-Public 0/9 (earlier run, `b8db2e5`: `eval/runs_phase3/combo/metrics.md`) |
+| F2 | TC2 called Confidential | TC Highly Sensitive recall 0% (0/3); unchanged after Phase 2 | High | Fixed in Phase 3 (combo arm): TC 12/12 correct, false-Public 0/9 (earlier run, `b8db2e5`: `eval/runs_phase3/combo/metrics.md`) |
 | F9 | SSN-shaped order IDs flagged as SSN, and the model defers to the flag | After Phase 2: SYN02 and SYN10 called Highly Sensitive in 3/3 runs each (6 synthetic misses, the largest remaining synthetic error) | High | Not fixed: Phase 3 (top candidate) |
 | F3 | `Unsafe` was a fourth, exclusive category | Unsafe recall 43% (9/21) → **100% (21/21)**; 9 synthetic classifications lost their sensitivity → 0 | High | **Fixed here** (schema change). Delta below |
 | F16 | SYN23 (minor's identity in a safeguarding record) called Highly Sensitive | 3/3 runs after Phase 2 (baseline: 1 Highly Sensitive + 2 `Unsafe`) | Medium: definition boundary | Not fixed: Phase 3 |

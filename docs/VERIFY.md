@@ -68,7 +68,7 @@ All eight labels match `eval/golden.csv`. `unsafe` is false for all, which is wh
 | When | What | Reading |
 |---|---|---|
 | First live run | Upload TC2: the model's reply could not be parsed ("model returned no valid sensitivity: 'Unknown'"); the row is `failed` | One failure; the seed export had the same failure once on TC2 (a container run). Eight consecutive local runs of TC2 all passed. Cause **unknown**: the raw reply was not logged |
-| Second live run | Upload TC2 classified Highly Sensitive but **none** of its citations had the quote found | Matches the eval's "at least one valid citation" rate of 11/12 on TC1-TC4 (`eval/runs_phase3/combo/metrics.md`). Seeded TC2 has two |
+| Second live run | Upload TC2 classified Highly Sensitive but **none** of its citations had the quote found | Matches the eval's "at least one valid citation" rate of 11/12 on TC1-TC4 (earlier run, `b8db2e5`: `eval/runs_phase3/combo/metrics.md`). Seeded TC2 has two |
 | Second live run | The per-IP limit never answered 429 in 9 uploads | Confirmed. The key was the last `X-Forwarded-For` entry; Render's service sits behind Cloudflare (response headers `Server: cloudflare`, `CF-RAY`), which appends each hop, so that entry was not the visitor (inferred from https://developers.cloudflare.com/fundamentals/reference/http-headers/) |
 
 Fix: `CLIENT_IP_HEADER=cf-connecting-ip`, set in the Render dashboard (and in `render.yaml`). Then the limit worked (table above). A forged `cf-connecting-ip` header from my machine was answered **403** (confirmed with curl; Cloudflare rejected it before the app), and forged `x-forwarded-for` and `x-real-ip` headers were answered 429. Whether every visitor gets a separate bucket could only be checked from one network: **unknown** for a second visitor, though the header is documented to hold the visitor's address.
@@ -81,7 +81,7 @@ About 32 s for the first request after 17 idle minutes (one measurement, see the
 
 ## Cost
 
-About 9 live classifications ($0.002 each, **inferred** from `eval/runs_phase3/combo/metrics.md`, the API does not return cost) plus about 30 local ones: well under $0.15. The spend cap in the Anthropic Console is the backstop; it is set by the project owner.
+About 9 live classifications ($0.002 each, **inferred** from `eval/runs_phase3/combo/metrics.md` (earlier run, `b8db2e5`), the API does not return cost) plus about 30 local ones: well under $0.15. The spend cap in the Anthropic Console is the backstop; it is set by the project owner.
 
 ## Known limits
 

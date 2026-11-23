@@ -36,3 +36,10 @@ jobs:
           docker run --rm -v "$PWD":/app -w /app docclf sh -c '
             python eval/run_eval.py report --dir eval/runs_phase3/combo > /tmp/report.md &&
             printf "%s\n" "$(cat /tmp/report.md)" | diff - eval/runs_phase3/combo/metrics.md'
+
+      # Same check for the 660c141 run, the one the README and the UI header cite.
+      - name: Report matches committed metrics.md (660c141 run)
+        run: |
+          docker run --rm -v "$PWD":/app -w /app docclf sh -c '
+            python eval/run_eval.py report --dir eval/runs_phase3/head_660c141 > /tmp/report.md &&
+            printf "%s\n" "$(cat /tmp/report.md)" | diff - eval/runs_phase3/head_660c141/metrics.md'

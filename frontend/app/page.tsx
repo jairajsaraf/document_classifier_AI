@@ -21,12 +21,12 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api, fmtDate, SENSITIVITIES, SensitivityTag, STATUS, TopBar, UnsafeTag, type DocRow } from '@/components/bits'
 
-// Source: eval/runs_phase3/combo/metrics.md (shipped prompt, claude-haiku-5-5, 3 runs) and docs/FEATURES.md.
+// Source: eval/runs_phase3/head_660c141/metrics.md (shipped prompt, claude-haiku-5-5, 3 runs, commit 660c141); "previous prompt" figures: eval/runs_phase2/metrics.md.
 const EVAL = [
-  { label: 'Test cases labelled correctly', value: '12/12', note: 'TC1–TC4, 3 runs each · vs 3/12 with the previous prompt' },
+  { label: 'Test cases labelled correctly', value: '11/12', note: 'TC1–TC4, 3 runs each · vs 3/12 with the previous prompt' },
   { label: 'Sensitive documents labelled Public', value: '0%', note: 'TC1–TC4 · vs 67% with the previous prompt' },
-  { label: 'Synthetic set labelled correctly', value: '63/72', note: '24 documents, 3 runs each' },
-  { label: 'Quotes found on the cited page', value: '31%', note: '28 of 91 citations on TC1–TC4' },
+  { label: 'Synthetic set labelled correctly', value: '64/72', note: '24 documents, 3 runs each' },
+  { label: 'Quotes found on the cited page', value: '27%', note: '24 of 88 citations on TC1–TC4' },
 ]
 
 const features = tableFeatures({

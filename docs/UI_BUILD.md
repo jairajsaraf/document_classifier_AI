@@ -23,7 +23,7 @@ Two screens, served by FastAPI as a static export (one process).
 - **Design tokens** (`frontend/app/globals.css`): a barely warm grey ramp (page `#f6f5f2`, card `#fdfcfa`, raised `#eeece7`, text `#1f1d1a` / `#55504a` / `#6b665e`), one redline `#9e3328` used only for Highly Sensitive, unsafe, errors and the selected citation. Focus ring `#1f1d1a` at 50%, about 3.2:1 on the card (inferred: my contrast arithmetic). Geist and Geist Mono, weights 400 and 500, sentence case, 4px grid, colour-only transitions. Icons are lucide at 16px with stroke 1.5; the one exception is the tick inside the citation chip, 12px with stroke 2.
 - **Choices made during the build, not asked:** the upload control accepts PDF only; the reviewer name is fixed; the eval figures are constants.
 
-Eval figures in the header strip come from `eval/runs_phase3/combo/metrics.md` and `docs/FEATURES.md` (confirmed): TC1-TC4 12/12 correct (vs 3/12 with the previous prompt), false-Public 0% (vs 67%), synthetic 63/72, quote found on the cited page 28/91 (31%). They are constants in `frontend/app/page.tsx`, not read from the API.
+Eval figures in the header strip come from `eval/runs_phase3/head_660c141/metrics.md` (the 2026-11-16 run at commit `660c141`) and, for the "previous prompt" figures, `eval/runs_phase2/metrics.md` (confirmed; 11/12, 3/12 and 64/72 are sums of the confusion-matrix rows): TC1-TC4 11/12 correct (vs 3/12 with the previous prompt), false-Public 0% (vs 67%), synthetic 64/72, quote found on the cited page 24/88 (27%). They are constants in `frontend/app/page.tsx`, not read from the API.
 
 ### Installed (confirmed: `frontend/package.json`)
 
